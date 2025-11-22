@@ -153,10 +153,6 @@ __weak void app_gimbal_task(void *argument) {
     OS::Task::Current().Delete();
 }
 
-__weak void dev_dji_motor_task(void *argument) {
-    OS::Task::Current().Delete();
-}
-
 __weak void app_ins_task(void *argument) {
     OS::Task::Current().Delete();
 }
