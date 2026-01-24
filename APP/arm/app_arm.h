@@ -5,6 +5,8 @@
 #pragma once
 
 #include "app_conf.h"
+#include "bsp_time.h"
+
 #include <matrix.h>
 
 #define Joint_Max   0
@@ -79,9 +81,11 @@ namespace arm {
             const Matrixf<4, 4>& base_, const Matrixf<4, 4>& tool_)
             : a2(a2_), a3(a3_), d2(d2_), d4(d4_), Base(base_), Tool(tool_) {
             arm_theta.cur_solutions = arm_theta.raw_data = matrixf::zeros<8,6>();
+            Base_inv = matrixf::inv(Base), Tool_inv = matrixf::inv(Tool);
         }
 
         Matrixf<4,4> arm_forward_clc(const Matrixf<6, 1>& tem_q) {
+            lst_cle_time[0] = bsp_time_get_us();
             for(uint8_t i =0; i<6; i++) {
                 cur_q[i][0] = tem_q[i][0];
             }
@@ -97,13 +101,16 @@ namespace arm {
             T_ = T_joint[0] * T_joint[1] * T_joint[2] * T_joint[3] * T_joint[4] * T_joint[5];
             T_end = Base * T_ * Tool;
 
+
+            clc_time[0] = bsp_time_get_us() - lst_cle_time[0];
             return T_end;
         }
 
         Matrixf<8, 6> arm_inverse_clc(const Matrixf<4, 4>& T_target) {
+            lst_cle_time[1] = bsp_time_get_us();
             Matrixf<8, 6> AllSloverTheta = matrixf::zeros<8, 6>();
 
-            Matrixf<4, 4> T06 = matrixf::inv(Base) * T_target * matrixf::inv(Tool);
+            Matrixf<4, 4> T06 = Base_inv * T_target * Tool_inv;
 
             float nx = T06[0][0], ny = T06[1][0], nz = T06[2][0];
             // float ox = T06[0][1], oy = T06[1][1], oz = T06[2][1];
@@ -230,6 +237,7 @@ namespace arm {
                 next_solution:;
             }
 
+            clc_time[1] = bsp_time_get_us() - lst_cle_time[1];
             return AllSloverTheta;
         }
 
@@ -237,9 +245,13 @@ namespace arm {
             return &arm_theta;
         }
 
+        uint32_t clc_time[2] = {};
+        uint32_t lst_cle_time[2] = {};
+
     private:
         float a2, a3, d2, d4;
         Matrixf<4,4> Base, Tool;
+        Matrixf<4,4> Base_inv, Tool_inv;
         Matrixf<4,4> T_joint[6];
         Matrixf<4, 4> T_, T_end;
         Matrixf<6,1> cur_q;

@@ -13,6 +13,8 @@
 #include "app_sys.h"
 #include "sys_task.h"
 
+#include <sys/types.h>
+
 #ifdef COMPILE_ARM
 
 arm::Kinematics arm_(360, -90, 14.64, 250,
@@ -28,7 +30,13 @@ void app_arm_task(void *args) {
 
     float q_data [6] = {50.2f*M_PI/180, 40.5f*M_PI/180, 112.17f*M_PI/180, 40.12f*M_PI/180, 56.21f*M_PI/180, 70.7f*M_PI/180};
 
+    float count = 0;
+
     while(true) {
+
+        if(++count == 360) count = 0;
+
+        q_data[0] = 50.0f*M_PI/180 + 10.0f*M_PI/180 * sinf(count*M_PI/180);
 
         Matrixf<6,1>tmp_q(q_data);
         Matrixf<4,4> T_end_t = arm_.arm_forward_clc(tmp_q);
@@ -41,7 +49,9 @@ void app_arm_task(void *args) {
             Theta[0][0]*180/M_PI,
             Theta[0][1]*180/M_PI,
             Theta[0][2]*180/M_PI,
-            Theta[0][3]*180/M_PI
+            Theta[0][3]*180/M_PI,
+            arm_.clc_time[0],
+            arm_.clc_time[1]
             );
 
         OS::Task::SleepMilliseconds(1);
