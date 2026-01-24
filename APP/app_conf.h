@@ -12,9 +12,10 @@
 
 // Warn: 特化机器人代码前，必须修改此处
 #define ROBOT_BRIEF "DEV_ROBOT"
+// #define ROBOT_BRIEF "Engineering"
 
 // 若启用，则可通过串口访问终端
-#define USE_TERMINAL
+// #define USE_TERMINAL
 
 #define TERMINAL_USER_NAME "user"
 #define TERMINAL_PLATFORM_NAME "stm32"
@@ -33,8 +34,11 @@
 // 云台
 // #define COMPILE_GIMBAL
 
+// 机械臂
+#define COMPILE_ARM
+
 // 若不是同时编译云台和底盘，则启用双控制器选项
-#if !(defined(COMPILE_CHASSIS) && defined(COMPILE_GIMBAL))
+#if !(defined(COMPILE_CHASSIS) && defined(COMPILE_ARM))
 #define USE_DUAL_CONTROLLER
 #endif
 

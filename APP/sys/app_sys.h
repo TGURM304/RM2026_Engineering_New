@@ -40,6 +40,7 @@ extern "C" {
 void app_sys_task();
 __weak void app_chassis_task(void *args);
 __weak void app_gimbal_task(void *args);
+__weak void app_arm_task(void *args);
 __weak void dev_dji_motor_task(void *args);
 __weak void app_ins_task(void *args);
 

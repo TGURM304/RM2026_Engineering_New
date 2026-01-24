@@ -67,6 +67,12 @@ include_directories(${includes})
 add_definitions(${defines})
 
 file(GLOB_RECURSE SOURCES ${sources} "BSP/*.*" "APP/*.*" "Components/*.*")
+file(GLOB_RECURSE SJTU_MATRIX_SOURCES
+        "${CMAKE_SOURCE_DIR}/External/Include/SJTU_Matrix/*.c"
+        "${CMAKE_SOURCE_DIR}/External/Include/SJTU_Matrix/*.cpp"
+)
+
+list(APPEND SOURCES ${SJTU_MATRIX_SOURCES})
 recursion_include(${CMAKE_SOURCE_DIR}/BSP)
 recursion_include(${CMAKE_SOURCE_DIR}/APP)
 recursion_include(${CMAKE_SOURCE_DIR}/Components)

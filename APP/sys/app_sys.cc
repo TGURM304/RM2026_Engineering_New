@@ -16,6 +16,7 @@
 #include "app_chassis.h"
 #include "app_gimbal.h"
 #include "app_conf.h"
+#include "app_arm.h"
 #include "bsp_buzzer.h"
 
 #include <cstdio>
@@ -75,6 +76,10 @@ void app_sys_init() {
     config.type |= 0b10;
     app_gimbal_init();
 #endif
+#ifdef COMPILE_ARM
+    config.type |= 0b100;
+    app_arm_init();
+#endif
 #ifdef USE_REFEREE_SYSTEM
     app_referee_init();
 #endif
@@ -103,7 +108,7 @@ void bsp_hw_init() {
     bsp_can_init(E_CAN1, &hfdcan1);
     bsp_can_init(E_CAN2, &hfdcan2);
     bsp_can_init(E_CAN3, &hfdcan3);
-    bsp_uart_init(E_UART_DEBUG, &huart1);
+    bsp_uart_init(E_UART_DEBUG, &huart10);
 }
 
 // 放一些系统级任务
@@ -150,6 +155,10 @@ __weak void app_chassis_task(void *argument) {
 }
 
 __weak void app_gimbal_task(void *argument) {
+    OS::Task::Current().Delete();
+}
+
+__weak void app_arm_task(void *argument) {
     OS::Task::Current().Delete();
 }
 
