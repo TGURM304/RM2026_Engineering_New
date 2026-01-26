@@ -59,6 +59,20 @@ namespace arm {
         return DHTrans;
     }
 
+    // 获取Position
+    inline Matrixf<3, 1> pos_from_T(const Matrixf<4, 4>& T) {
+        Matrixf<3, 1> p;
+        p[0][0] = T[0][3]; p[1][0] = T[1][3]; p[2][0] = T[2][3];
+        return p;
+    }
+    // 获取Z轴方向
+    inline Matrixf<3, 1> z_from_T(const Matrixf<4, 4>& T) {
+        Matrixf<3, 1> z;
+        z[0][0] = T[0][2]; z[1][0] = T[1][2]; z[2][0] = T[2][2];
+        return z;
+    }
+
+    // 角度归一化到 [-π, π]
     inline float wrapPi(float x) {
         return atan2f(sinf(x), cosf(x));
     }
@@ -67,11 +81,12 @@ namespace arm {
         Joint0, Joint1, Joint2, Joint3, Joint4, Joint5
     };
 
+    // 暂未使用
     struct app_Arm_Theta_t {
         bool range_state{false};
         uint8_t out_id{};
-        Matrixf<8,6> raw_data;
-        Matrixf<8,6> cur_solutions;
+        Matrixf<8, 6> raw_data;
+        Matrixf<8, 6> cur_solutions;
     };
 
     class Kinematics {
@@ -80,11 +95,12 @@ namespace arm {
         Kinematics(float const a2_, float const a3_, float const d2_, float const d4_,
             const Matrixf<4, 4>& base_, const Matrixf<4, 4>& tool_)
             : a2(a2_), a3(a3_), d2(d2_), d4(d4_), Base(base_), Tool(tool_) {
-            arm_theta.cur_solutions = arm_theta.raw_data = matrixf::zeros<8,6>();
+            arm_theta.cur_solutions = arm_theta.raw_data = matrixf::zeros<8, 6>();
             Base_inv = matrixf::inv(Base), Tool_inv = matrixf::inv(Tool);
         }
 
-        Matrixf<4,4> arm_forward_clc(const Matrixf<6, 1>& tem_q) {
+        // 正运动学解算
+        Matrixf<4, 4> arm_forward_clc(const Matrixf<6, 1>& tem_q) {
             lst_cle_time[0] = bsp_time_get_us();
             for(uint8_t i =0; i<6; i++) {
                 cur_q[i][0] = tem_q[i][0];
@@ -106,6 +122,34 @@ namespace arm {
             return T_end;
         }
 
+        // 雅可比矩阵计算
+        Matrixf<6, 6> arm_jacobi_clc(const Matrixf<6, 1>& tem_q) {
+            lst_cle_time[2] = bsp_time_get_us();
+
+            Matrixf<4, 4> T01 = T_joint[0];
+            Matrixf<4, 4> T02 = T01 * T_joint[1];
+            Matrixf<4, 4> T03 = T02 * T_joint[2];
+            Matrixf<4, 4> T04 = T03 * T_joint[3];
+            Matrixf<4, 4> T05 = T04 * T_joint[4];
+            Matrixf<4, 4> T06 = T_;
+
+            Matrixf<3, 1> P01 = pos_from_T(T01), P02 = pos_from_T(T02), P03 = pos_from_T(T03);
+            Matrixf<3, 1> P04 = pos_from_T(T04), P05 = pos_from_T(T05), P06 = pos_from_T(T06);
+            Matrixf<3, 1> Z1 = z_from_T(T01), Z2 = z_from_T(T02), Z3 = z_from_T(T03);
+            Matrixf<3, 1> Z4 = z_from_T(T04), Z5 = z_from_T(T05), Z6 = z_from_T(T06);
+
+            set_col(Jacobi, 0, vector3f::cross(Z1, P06 - P01), Z1);
+            set_col(Jacobi, 1, vector3f::cross(Z2, P06 - P02), Z2);
+            set_col(Jacobi, 2, vector3f::cross(Z3, P06 - P03), Z3);
+            set_col(Jacobi, 3, vector3f::cross(Z4, P06 - P04), Z4);
+            set_col(Jacobi, 4, vector3f::cross(Z5, P06 - P05), Z5);
+            set_col(Jacobi, 5, matrixf::zeros<3, 1>(), Z6);
+
+            clc_time[2] = bsp_time_get_us() - lst_cle_time[2];
+            return Jacobi;
+        }
+
+        // 逆运动学解算
         Matrixf<8, 6> arm_inverse_clc(const Matrixf<4, 4>& T_target) {
             lst_cle_time[1] = bsp_time_get_us();
             Matrixf<8, 6> AllSloverTheta = matrixf::zeros<8, 6>();
@@ -245,15 +289,22 @@ namespace arm {
             return &arm_theta;
         }
 
-        uint32_t clc_time[2] = {};
-        uint32_t lst_cle_time[2] = {};
+        uint32_t clc_time[3] = {};
+        uint32_t lst_cle_time[3] = {};
 
     private:
+        static void set_col(Matrixf<6, 6>& J, uint8_t col,
+                   const Matrixf<3, 1>& lin, const Matrixf<3, 1>& ang) {
+            J[0][col] = lin[0][0]; J[1][col] = lin[1][0]; J[2][col] = lin[2][0];
+            J[3][col] = ang[0][0]; J[4][col] = ang[1][0]; J[5][col] = ang[2][0];
+        }
+
         float a2, a3, d2, d4;
         Matrixf<4,4> Base, Tool;
         Matrixf<4,4> Base_inv, Tool_inv;
         Matrixf<4,4> T_joint[6];
         Matrixf<4, 4> T_, T_end;
+        Matrixf<6, 6> Jacobi;
         Matrixf<6,1> cur_q;
         app_Arm_Theta_t arm_theta;
 
@@ -266,6 +317,9 @@ namespace arm {
             {-M_PI, M_PI}
         };
     };
+
+    /* 暂无动力学模型 */
+
     // class Dynamic {
     //     public:
     //     Dynamic();

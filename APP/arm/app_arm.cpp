@@ -36,22 +36,36 @@ void app_arm_task(void *args) {
 
         if(++count == 360) count = 0;
 
-        q_data[0] = 50.0f*M_PI/180 + 10.0f*M_PI/180 * sinf(count*M_PI/180);
+        q_data[0] = 50.0f*M_PI/180 + 20.0f*M_PI/180 * sinf(count*M_PI/180);
+        q_data[1] = 50.0f*M_PI/180 + 30.0f*M_PI/180 * cosf(count*M_PI/180);
 
         Matrixf<6,1>tmp_q(q_data);
         Matrixf<4,4> T_end_t = arm_.arm_forward_clc(tmp_q);
         Matrixf<8, 6> Theta = arm_.arm_inverse_clc(T_end_t);
+        Matrixf<6, 6> Jacobi = arm_.arm_jacobi_clc(tmp_q);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            T_end_t[0][0],
-            T_end_t[1][1],
-            T_end_t[2][2],
+            // T_end_t[0][0],
+            // T_end_t[1][1],
+            // T_end_t[2][2],
             Theta[0][0]*180/M_PI,
             Theta[0][1]*180/M_PI,
             Theta[0][2]*180/M_PI,
             Theta[0][3]*180/M_PI,
+            Theta[0][4]*180/M_PI,
+            Theta[0][5]*180/M_PI,
             arm_.clc_time[0],
-            arm_.clc_time[1]
+            arm_.clc_time[1],
+            arm_.clc_time[2]
+            // Jacobi[0][0],
+            // Jacobi[0][1],
+            // Jacobi[0][2],
+            // Jacobi[1][0],
+            // Jacobi[1][1],
+            // Jacobi[1][2],
+            // Jacobi[2][0],
+            // Jacobi[2][1],
+            // Jacobi[2][2]
             );
 
         OS::Task::SleepMilliseconds(1);
