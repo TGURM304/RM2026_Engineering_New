@@ -152,7 +152,6 @@ namespace arm {
         // 逆运动学解算
         Matrixf<8, 6> arm_inverse_clc(const Matrixf<4, 4>& T_target) {
             lst_cle_time[1] = bsp_time_get_us();
-            Matrixf<8, 6> AllSloverTheta = matrixf::zeros<8, 6>();
 
             Matrixf<4, 4> T06 = Base_inv * T_target * Tool_inv;
 
@@ -194,27 +193,32 @@ namespace arm {
                 float tem1 = theta1[id1[k]];
                 float tem3 = theta3[id3[k]];
 
+                float s1 = sinf(tem1), c1 = cosf(tem1);
+                float s3 = sinf(tem3), c3 = cosf(tem3);
+
                 // theta2
-                float num = (a2*cosf(tem3) + a3) * pz + (cosf(tem1)*px + sinf(tem1)*py) * (a2*sinf(tem3) + d4);
-                float den = -(d4 + a2*sinf(tem3)) * pz + (cosf(tem1)*px + sinf(tem1)*py) * (a2*cosf(tem3) + a3);
+                float num = (a2*c3 + a3) * pz + (c1*px + s1*py) * (a2*s3 + d4);
+                float den = -(d4 + a2*s3) * pz + (c1*px + s1*py) * (a2*c3 + a3);
                 theta23[k] = atan2f(num, den);
                 theta2[k] = theta23[k] - tem3;
 
                 // theta4
                 float tem23 = theta2[k] + tem3;
-                float tem4_1 = ax*sinf(tem1) - ay*cosf(tem1);
-                float tem4_2 = ax*cosf(tem1)*cosf(tem23) + ay*sinf(tem1)*cosf(tem23) + az*sinf(tem23);
+                float s23 = sinf(tem23), c23 = cosf(tem23);
+                
+                float tem4_1 = ax*s1 - ay*c1;
+                float tem4_2 = ax*c1*c23 + ay*s1*c23 + az*s23;
 
                 if (fabsf(tem4_1) < 1e-9 && fabsf(tem4_2) < 1e-9) {
                     theta4[k] = theta5[k] = theta6[k] = 0.0f;
                     continue;
                 } else theta4[k] = atan2f(tem4_1, tem4_2);
 
+                float s4 = sinf(theta4[k]), c4 = cosf(theta4[k]);
+
                 // theta5
-                float tem5_1 = ax * (cosf(tem1)*cosf(tem23)*cosf(theta4[k]) + sinf(tem1)*sinf(theta4[k])) +
-                       ay * (sinf(tem1)*cosf(tem23)*cosf(theta4[k]) - cosf(tem1)*sinf(theta4[k])) +
-                       az * (sinf(tem23)*cosf(theta4[k]));
-                float tem5_2 = ax*cosf(tem1)*sinf(tem23) + ay*sinf(tem1)*sinf(tem23) - az*cosf(tem23);
+                float tem5_1 = ax * (c1*c23*c4 + s1*s4) + ay * (s1*c23*c4 - c1*s4) + az * (s23*c4);
+                float tem5_2 = ax*c1*s23 + ay*s1*s23 - az*c23;
 
                 if (fabsf(tem5_1) < 1e-9f && fabsf(tem5_2) < 1e-9f) {
                     theta5[k] = 0.0f;
@@ -222,15 +226,13 @@ namespace arm {
                     theta5[k] = atan2f(tem5_1, tem5_2);
                 }
 
+                float s5 = sinf(theta5[k]), c5 = cosf(theta5[k]);
+
                 // theta6
-                float tem6_1 = -nx * (cosf(tem1)*cosf(tem23)*sinf(theta4[k]) - sinf(tem1)*cosf(theta4[k])) -
-                       ny * (sinf(tem1)*cosf(tem23)*sinf(theta4[k]) + cosf(tem1)*cosf(theta4[k])) -
-                       nz * sinf(tem23) * sinf(theta4[k]);
-                float tem6_2 = nx * ((cosf(tem1)*cosf(tem23)*cosf(theta4[k]) + sinf(tem1)*sinf(theta4[k])) * cosf(theta5[k]) -
-                             cosf(tem1)*sinf(tem23)*sinf(theta5[k])) +
-                       ny * ((sinf(tem1)*cosf(tem23)*cosf(theta4[k]) - cosf(tem1)*sinf(theta4[k])) * cosf(theta5[k]) -
-                             sinf(tem1)*sinf(tem23)*sinf(theta5[k])) +
-                       nz * (sinf(tem23)*cosf(theta4[k])*cosf(theta5[k]) + cosf(tem23)*sinf(theta5[k]));
+                float tem6_1 = -nx * (c1*c23*s4 - s1*c4) - ny * (s1*c23*s4 + c1*c4) - nz * s23 * s4;
+                float tem6_2 = nx * ((c1*c23*c4 + s1*s4) * c5 - c1*s23*s5) +
+                            ny * ((s1*c23*c4 - c1*s4) * c5 - s1*s23*s5) +
+                            nz * (s23*c4*c5 + c23*s5);
 
                 if (fabsf(tem6_1) < 1e-9f && fabsf(tem6_2) < 1e-9f) {
                     theta6[k] = 0.0f;
@@ -251,15 +253,7 @@ namespace arm {
             }
 
             // 应用偏移量并归一化
-            float offset[6] = {0.0f, 0.0f, M_PI_2, 0.0f, 0.0f, 0.0f};
-            float AllSolutions[8][6];
-
-            for (uint8_t i = 0; i < 8; i++) {
-                for (uint8_t k = 0; k < 6; k++) {
-                    AllSolutions[i][k] = wrapPi(thetax_8[k][i] - offset[k]);
-                }
-            }
-
+            const float offset[6] = {0.0f, 0.0f, M_PI_2, 0.0f, 0.0f, 0.0f};
             // 角度限幅
             uint8_t validCount = 0;
 
@@ -305,6 +299,7 @@ namespace arm {
         Matrixf<4,4> T_joint[6];
         Matrixf<4, 4> T_, T_end;
         Matrixf<6, 6> Jacobi;
+        Matrixf<8, 6> AllSloverTheta;
         Matrixf<6,1> cur_q;
         app_Arm_Theta_t arm_theta;
 
