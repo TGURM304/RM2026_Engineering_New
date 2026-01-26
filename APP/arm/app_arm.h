@@ -101,7 +101,7 @@ namespace arm {
 
         // 正运动学解算
         Matrixf<4, 4> arm_forward_clc(const Matrixf<6, 1>& tem_q) {
-            lst_cle_time[0] = bsp_time_get_us();
+            lst_clc_time[0] = bsp_time_get_us();
             for(uint8_t i =0; i<6; i++) {
                 cur_q[i][0] = tem_q[i][0];
             }
@@ -118,13 +118,13 @@ namespace arm {
             T_end = Base * T_ * Tool;
 
 
-            clc_time[0] = bsp_time_get_us() - lst_cle_time[0];
+            clc_time[0] = bsp_time_get_us() - lst_clc_time[0];
             return T_end;
         }
 
         // 雅可比矩阵计算
         Matrixf<6, 6> arm_jacobi_clc(const Matrixf<6, 1>& tem_q) {
-            lst_cle_time[2] = bsp_time_get_us();
+            lst_clc_time[2] = bsp_time_get_us();
 
             Matrixf<4, 4> T01 = T_joint[0];
             Matrixf<4, 4> T02 = T01 * T_joint[1];
@@ -145,13 +145,13 @@ namespace arm {
             set_col(Jacobi, 4, vector3f::cross(Z5, P06 - P05), Z5);
             set_col(Jacobi, 5, matrixf::zeros<3, 1>(), Z6);
 
-            clc_time[2] = bsp_time_get_us() - lst_cle_time[2];
+            clc_time[2] = bsp_time_get_us() - lst_clc_time[2];
             return Jacobi;
         }
 
         // 逆运动学解算
         Matrixf<8, 6> arm_inverse_clc(const Matrixf<4, 4>& T_target) {
-            lst_cle_time[1] = bsp_time_get_us();
+            lst_clc_time[1] = bsp_time_get_us();
 
             Matrixf<4, 4> T06 = Base_inv * T_target * Tool_inv;
 
@@ -275,7 +275,7 @@ namespace arm {
                 next_solution:;
             }
 
-            clc_time[1] = bsp_time_get_us() - lst_cle_time[1];
+            clc_time[1] = bsp_time_get_us() - lst_clc_time[1];
             return AllSloverTheta;
         }
 
@@ -284,7 +284,7 @@ namespace arm {
         }
 
         uint32_t clc_time[3] = {};
-        uint32_t lst_cle_time[3] = {};
+        uint32_t lst_clc_time[3] = {};
 
     private:
         static void set_col(Matrixf<6, 6>& J, uint8_t col,
