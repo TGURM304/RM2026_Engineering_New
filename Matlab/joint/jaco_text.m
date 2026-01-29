@@ -40,5 +40,7 @@ differential = jacobian(q, a2, a3, d2, d4);
 %调用机器人工具箱的jacob0函数，求解雅克比矩阵
 robot_data = IRB4600.jacob0(q_);
 
+disp("矢量积法求解的jacobian：")
 disp(differential);
+disp("使用机器人工具箱求解的jacobian：")
 disp(robot_data);
