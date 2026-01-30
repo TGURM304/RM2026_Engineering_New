@@ -15,11 +15,20 @@
 
 #include <sys/types.h>
 
+#include "bsp_rng.h"
+
 #ifdef COMPILE_ARM
 
 arm::Kinematics arm_(360, -90, 14.64, 250,
-    Matrixf<4,4>().translation(0.0f, 0.0f, 80.0f),
-    Matrixf<4,4>().translation(0.0f, 0.0f, 170.0f+250.0f));
+                     Matrixf<4, 4>().translation(0.0f, 0.0f, 80.0f),
+                     Matrixf<4, 4>().translation(0.0f, 0.0f, 170.0f + 250.0f));
+
+arm::Kinematics arm__(360, -90, 14.64, 250,
+                     Matrixf<4, 4>().translation(0.0f, 0.0f, 80.0f),
+                     Matrixf<4, 4>().translation(0.0f, 0.0f, 170.0f + 250.0f));
+
+auto arm_data = arm_.app_arm_data();
+auto arm_data_ = arm__.app_arm_data();
 
 // 静态任务，在 CubeMX 中配置
 void app_arm_task(void *args) {
@@ -28,45 +37,56 @@ void app_arm_task(void *args) {
 
     OS::Task::SleepMilliseconds(100);
 
-    float q_data [6] = {50.2f*M_PI/180, 40.5f*M_PI/180, 112.17f*M_PI/180, 40.12f*M_PI/180, 56.21f*M_PI/180, 70.7f*M_PI/180};
+    float q_data[6] = {
+        50.2f * M_PI / 180, 40.5f * M_PI / 180, 112.17f * M_PI / 180, 40.12f * M_PI / 180, 56.21f * M_PI / 180,
+        70.7f * M_PI / 180
+    };
 
     float count = 0;
+    int8_t rng[6] = {};
 
     while(true) {
 
         if(++count == 360) count = 0;
 
-        q_data[0] = 50.0f*M_PI/180 + 20.0f*M_PI/180 * sinf(count*M_PI/180);
-        q_data[1] = 50.0f*M_PI/180 + 30.0f*M_PI/180 * cosf(count*M_PI/180);
+        float Lim[6][2] = {
+            {-M_PI, M_PI},
+            {0.0f, M_PI},
+            {0.0f, 150.0f * M_PI/180.0f},
+            {-M_PI, M_PI},
+            {-150.0f * M_PI/180.0f, 150.0f * M_PI/180.0f},
+            {-M_PI, M_PI}
+        };
 
-        Matrixf<6,1>tmp_q(q_data);
-        Matrixf<4,4> T_end_t = arm_.arm_forward_clc(tmp_q);
-        Matrixf<8, 6> Theta = arm_.arm_inverse_clc(T_end_t);
-        Matrixf<6, 6> Jacobi = arm_.arm_jacobi_clc(tmp_q);
+        for(uint8_t i = 0; i < 6; i++) {
+            rng[i] = bsp_rng_random(-5, 5);
+            q_data[i] += rng[i] * 0.1 * M_PI / 180;
+            if (q_data[i] > Lim[i][1]) q_data[i] = Lim[i][1];
+            if (q_data[i] < Lim[i][0]) q_data[i] = Lim[i][0];
+        }
+
+        Matrixf<6, 1> tmp_q(q_data);
+        arm_.arm_forward_clc(tmp_q);
+        arm_.arm_inverse_clc(arm_data->T_arm_end);
+        arm_.arm_jacobi_clc();
+        arm_.select_angle();
+        arm__.arm_forward_clc(arm_data->upd_angle);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            // T_end_t[0][0],
-            // T_end_t[1][1],
-            // T_end_t[2][2],
-            Theta[0][0]*180/M_PI,
-            Theta[0][1]*180/M_PI,
-            Theta[0][2]*180/M_PI,
-            Theta[0][3]*180/M_PI,
-            Theta[0][4]*180/M_PI,
-            Theta[0][5]*180/M_PI,
-            arm_.clc_time[0],
-            arm_.clc_time[1],
-            arm_.clc_time[2]
-            // Jacobi[0][0],
-            // Jacobi[0][1],
-            // Jacobi[0][2],
-            // Jacobi[1][0],
-            // Jacobi[1][1],
-            // Jacobi[1][2],
-            // Jacobi[2][0],
-            // Jacobi[2][1],
-            // Jacobi[2][2]
-            );
+                          arm_data->upd_angle[0][0] * 180 / M_PI,
+                          arm_data->upd_angle[1][0] * 180 / M_PI,
+                          arm_data->upd_angle[2][0] * 180 / M_PI,
+                          arm_data->upd_angle[3][0] * 180 / M_PI,
+                          arm_data->upd_angle[4][0] * 180 / M_PI,
+                          arm_data->upd_angle[5][0] * 180 / M_PI,
+                          arm_data->T_arm_end[0][2] - arm_data_->T_arm_end[0][2],
+                          arm_data->T_arm_end[1][2] - arm_data_->T_arm_end[1][2],
+                          arm_data->T_arm_end[2][2] - arm_data_->T_arm_end[2][2],
+                          arm_.clc_time[0],
+                          arm_.clc_time[1],
+                          arm_.clc_time[2],
+                          arm_.clc_time[3]
+        );
 
         OS::Task::SleepMilliseconds(1);
     }

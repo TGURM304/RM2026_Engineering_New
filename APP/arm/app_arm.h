@@ -81,12 +81,13 @@ namespace arm {
         Joint0, Joint1, Joint2, Joint3, Joint4, Joint5
     };
 
-    // 暂未使用
-    struct app_Arm_Theta_t {
+    struct app_Arm_data_t {
         bool range_state{false};
-        uint8_t out_id{};
-        Matrixf<8, 6> raw_data;
-        Matrixf<8, 6> cur_solutions;
+        uint8_t validCount{};
+        Matrixf<4, 4> T_arm_end;
+        Matrixf<6, 6> J_arm;
+        Matrixf<8, 6> raw_data, cur_angle;
+        Matrixf<6, 1> upd_angle;
     };
 
     class Kinematics {
@@ -95,12 +96,12 @@ namespace arm {
         Kinematics(float const a2_, float const a3_, float const d2_, float const d4_,
             const Matrixf<4, 4>& base_, const Matrixf<4, 4>& tool_)
             : a2(a2_), a3(a3_), d2(d2_), d4(d4_), Base(base_), Tool(tool_) {
-            arm_theta.cur_solutions = arm_theta.raw_data = matrixf::zeros<8, 6>();
+            arm_theta.cur_angle = arm_theta.raw_data = matrixf::zeros<8, 6>();
             Base_inv = matrixf::inv(Base), Tool_inv = matrixf::inv(Tool);
         }
 
         // 正运动学解算
-        Matrixf<4, 4> arm_forward_clc(const Matrixf<6, 1>& tem_q) {
+        void arm_forward_clc(const Matrixf<6, 1>& tem_q) {
             lst_clc_time[0] = bsp_time_get_us();
             for(uint8_t i =0; i<6; i++) {
                 cur_q[i][0] = tem_q[i][0];
@@ -116,14 +117,13 @@ namespace arm {
 
             T_ = T_joint[0] * T_joint[1] * T_joint[2] * T_joint[3] * T_joint[4] * T_joint[5];
             T_end = Base * T_ * Tool;
-
+            arm_theta.T_arm_end = T_end;
 
             clc_time[0] = bsp_time_get_us() - lst_clc_time[0];
-            return T_end;
         }
 
         // 雅可比矩阵计算
-        Matrixf<6, 6> arm_jacobi_clc(const Matrixf<6, 1>& tem_q) {
+        void arm_jacobi_clc() {
             lst_clc_time[2] = bsp_time_get_us();
 
             Matrixf<4, 4> T01 = T_joint[0];
@@ -144,13 +144,13 @@ namespace arm {
             set_col(Jacobi, 3, vector3f::cross(Z4, P06 - P04), Z4);
             set_col(Jacobi, 4, vector3f::cross(Z5, P06 - P05), Z5);
             set_col(Jacobi, 5, matrixf::zeros<3, 1>(), Z6);
+            arm_theta.J_arm = Jacobi;
 
             clc_time[2] = bsp_time_get_us() - lst_clc_time[2];
-            return Jacobi;
         }
 
         // 逆运动学解算
-        Matrixf<8, 6> arm_inverse_clc(const Matrixf<4, 4>& T_target) {
+        void arm_inverse_clc(const Matrixf<4, 4>& T_target) {
             lst_clc_time[1] = bsp_time_get_us();
 
             Matrixf<4, 4> T06 = Base_inv * T_target * Tool_inv;
@@ -165,12 +165,12 @@ namespace arm {
             if (ForJudgment < -1e-6) {
                 arm_theta.raw_data = matrixf::zeros<8, 6>();
                 arm_theta.range_state = false;
-                return AllSloverTheta;
+                return;
             }
             if (ForJudgment >= -1e-6 && ForJudgment < 0.0) {
-                arm_theta.range_state = false;
                 ForJudgment = 0.0;
             }
+            arm_theta.range_state = true;
 
             // theta1 (2个)
             float theta1[2];
@@ -186,8 +186,8 @@ namespace arm {
 
             // theta2, theta4, theta5, theta6 (4个)
             float theta23[4], theta2[4], theta4[4], theta5[4], theta6[4];
-            int id1[4] = {0, 1, 0, 1};
-            int id3[4] = {0, 0, 1, 1};
+            uint8_t id1[4] = {0, 1, 0, 1};
+            uint8_t id3[4] = {0, 0, 1, 1};
 
             for (uint8_t k = 0; k < 4; k++) {
                 float tem1 = theta1[id1[k]];
@@ -255,7 +255,7 @@ namespace arm {
             // 应用偏移量并归一化
             const float offset[6] = {0.0f, 0.0f, M_PI_2, 0.0f, 0.0f, 0.0f};
             // 角度限幅
-            uint8_t validCount = 0;
+            validCount = 0;
 
             for (uint8_t i = 0; i < 8; i++) {
                 float q_tmp[6];
@@ -267,24 +267,50 @@ namespace arm {
                     }
                 }
                 for (uint8_t k = 0; k < 6; k++) {
-                    AllSloverTheta[validCount][k] = q_tmp[k];
-                    arm_theta.cur_solutions[validCount][k] = q_tmp[k];
+                    arm_theta.cur_angle[validCount][k] = q_tmp[k];
                 }
                 validCount++;
 
                 next_solution:;
             }
+            arm_theta.validCount = validCount;
 
             clc_time[1] = bsp_time_get_us() - lst_clc_time[1];
-            return AllSloverTheta;
         }
 
-        const app_Arm_Theta_t *app_Arm_Theta() {
+        // 解的选择
+        void select_angle() {
+            lst_clc_time[3] = bsp_time_get_us();
+            if (validCount == 0) arm_theta.upd_angle = matrixf::zeros<6, 1>();
+
+            float min_dist = 1e10f;
+            uint8_t best_idx = 0;
+
+            for (uint8_t i = 0; i < validCount; i++) {
+                float dist = 0.0f;
+                for (uint8_t j = 0; j < 6; j++) {
+                    float diff = arm_theta.cur_angle[i][j] - cur_q[j][0];
+                    // 处理角度周期性：选择最短路径
+                    if (diff > M_PI) diff -= 2.0f * M_PI;
+                    if (diff < -M_PI) diff += 2.0f * M_PI;
+                    dist += diff * diff;
+                }
+                if (dist < min_dist) {
+                    min_dist = dist;
+                    best_idx = i;
+                }
+            }
+
+            arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
+            clc_time[3] = bsp_time_get_us() - lst_clc_time[3];
+        }
+
+        const app_Arm_data_t *app_arm_data() {
             return &arm_theta;
         }
 
-        uint32_t clc_time[3] = {};
-        uint32_t lst_clc_time[3] = {};
+        uint32_t clc_time[4] = {};
+        uint32_t lst_clc_time[4] = {};
 
     private:
         static void set_col(Matrixf<6, 6>& J, uint8_t col,
@@ -294,14 +320,14 @@ namespace arm {
         }
 
         float a2, a3, d2, d4;
+        uint8_t validCount = 0;
         Matrixf<4,4> Base, Tool;
         Matrixf<4,4> Base_inv, Tool_inv;
         Matrixf<4,4> T_joint[6];
         Matrixf<4, 4> T_, T_end;
         Matrixf<6, 6> Jacobi;
-        Matrixf<8, 6> AllSloverTheta;
         Matrixf<6,1> cur_q;
-        app_Arm_Theta_t arm_theta;
+        app_Arm_data_t arm_theta;
 
         const float Lim[6][2] = {
             {-M_PI, M_PI},
@@ -317,65 +343,7 @@ namespace arm {
 
     // class Dynamic {
     //     public:
-    //     Dynamic();
-    //     Dynamic(float const R_, float const r_, float const L_, float const l_): R(R_), r(r_), L(L_), l(l_) {
-    //         float data1[3] = {R_,0,0}, data2[3] = {r_, 0, 0};
-    //         Matrixf<3,1> temp1(data1), temp2(data2);
-    //         for(uint8_t i = 0; i < 3; i++) {
-    //             pos_oc[i] = temp1.rot_z(phi[i]) * temp1;
-    //             pos_pa[i] = temp2.rot_z(phi[i]) * temp2;
-    //             theta_i[i] = 0;
-    //         }
-    //     }
-    //
-    //     Matrixf<3, 1>  tor_clc(const Matrixf<3, 1>& _theta, const Matrixf<3, 1>& vector_OP, const Matrixf<3, 1>& force) {
-    //         Matrixf<3, 1> vec_op = vector_OP, vec_force = force;
-    //         theta_i[0] = _theta[0][0] ,theta_i[1] = _theta[1][0] ,theta_i[2] = _theta[2][0];
-    //         Matrixf<1,3> t_s[3];
-    //         for(uint8_t i = 0; i < 3; i++) {
-    //             get_bi(theta_i[i],phi[i],&pos_b[i]);
-    //             get_cbi(theta_i[i],phi[i],&pos_cb[i]);
-    //             pos_s[i] = (vec_op + pos_pa[i] - pos_oc[i] - pos_cb[i])/1000;
-    //             t_s[i] = pos_s[i].trans();
-    //         }
-    //
-    //         Matrixf<3,3> temp1 = matrixf::vertcat(matrixf::vertcat(t_s[0], t_s[1]), t_s[2]);
-    //         temp1 = matrixf::inv(temp1);
-    //         Matrixf<3,3> temp2 = matrixf::zeros<3,3>();
-    //         for(uint8_t i = 0; i < 3; i++) {
-    //             Matrixf<1,1> temp = t_s[i] * pos_b[i] / 1000;
-    //             temp2[i][i] = temp[0][0];
-    //         }
-    //         Matrixf<3,3> jacobi = (temp1)*(temp2);
-    //         Matrixf<1,3> f = vec_force.trans();
-    //         tor = f*jacobi;
-    //
-    //         return tor.trans();
-    //     }
-    //
     // private:
-    //     void get_bi(float _theta, float _phi, Matrixf<3,1> *mat) const {
-    //         //这里正负号存疑
-    //         float data[3] = {L*sin(_theta),0,L*cos(_theta)};
-    //         Matrixf<3,1> temp(data);
-    //         *mat = temp.rot_z(_phi) * temp;
-    //     }
-    //     void get_cbi(float _theta, float _phi, Matrixf<3,1> *mat) const {
-    //         float data[3] = {L*cos(_theta),0,-L*sin(_theta)};
-    //         Matrixf<3,1> temp(data);
-    //         *mat = temp.rot_z(_phi) * temp;
-    //     }
-    //     float R,r,L,l;
-    //     const float phi[3] = {0,
-    //                     2.0f * M_PI / 3.0f,
-    //                     4.0f * M_PI / 3.0f,};
-    //     float theta_i[3];
-    //     Matrixf<3,1> pos_oc[3];
-    //     Matrixf<3,1> pos_b[3];          //x+bθ其中的b
-    //     Matrixf<3,1> pos_cb[3];
-    //     Matrixf<3,1> pos_pa[3];
-    //     Matrixf<3,1> pos_s[3];
-    //     Matrixf<1,3> tor;
     // };
 }
 #endif
