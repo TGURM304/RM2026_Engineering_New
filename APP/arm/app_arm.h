@@ -286,6 +286,9 @@ namespace arm {
             float min_dist = 1e10f;
             uint8_t best_idx = 0;
 
+            for (uint8_t i = 0; i < 8; i++) {
+                diff_tmp[i] = 0;
+            }
             for (uint8_t i = 0; i < validCount; i++) {
                 float dist = 0.0f;
                 for (uint8_t j = 0; j < 6; j++) {
@@ -295,12 +298,16 @@ namespace arm {
                     if (diff < -M_PI) diff += 2.0f * M_PI;
                     dist += diff * diff;
                 }
+
+                diff_tmp[i] = dist;
+
                 if (dist < min_dist) {
                     min_dist = dist;
                     best_idx = i;
                 }
             }
 
+            best_idx_t = best_idx;
             arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
             clc_time[3] = bsp_time_get_us() - lst_clc_time[3];
         }
@@ -311,6 +318,8 @@ namespace arm {
 
         uint32_t clc_time[4] = {};
         uint32_t lst_clc_time[4] = {};
+        int16_t diff_tmp[8] = {};
+        uint8_t best_idx_t = 0;
 
     private:
         static void set_col(Matrixf<6, 6>& J, uint8_t col,

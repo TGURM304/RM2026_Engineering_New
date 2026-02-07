@@ -73,19 +73,29 @@ void app_arm_task(void *args) {
         arm__.arm_forward_clc(arm_data->upd_angle);
 
         app_msg_vofa_send(E_UART_DEBUG,
-                          arm_data->upd_angle[0][0] * 180 / M_PI,
-                          arm_data->upd_angle[1][0] * 180 / M_PI,
-                          arm_data->upd_angle[2][0] * 180 / M_PI,
+                          // arm_data->cur_angle[arm_.best_idx_t][3] * 180 / M_PI,
+                          // arm_data->cur_angle[arm_.best_idx_t][4] * 180 / M_PI,
+                          // arm_data->cur_angle[arm_.best_idx_t][5] * 180 / M_PI,
                           arm_data->upd_angle[3][0] * 180 / M_PI,
                           arm_data->upd_angle[4][0] * 180 / M_PI,
                           arm_data->upd_angle[5][0] * 180 / M_PI,
-                          arm_data->T_arm_end[0][2] - arm_data_->T_arm_end[0][2],
-                          arm_data->T_arm_end[1][2] - arm_data_->T_arm_end[1][2],
-                          arm_data->T_arm_end[2][2] - arm_data_->T_arm_end[2][2],
-                          arm_.clc_time[0],
-                          arm_.clc_time[1],
-                          arm_.clc_time[2],
-                          arm_.clc_time[3]
+                          tmp_q[3][0] * 180 / M_PI,
+                          tmp_q[4][0] * 180 / M_PI,
+                          tmp_q[5][0] * 180 / M_PI,
+                          arm_.diff_tmp[0],
+                          arm_.diff_tmp[1],
+                          arm_.diff_tmp[2],
+                          arm_.diff_tmp[3],
+                          arm_.diff_tmp[4],
+                          arm_.diff_tmp[5],
+                          arm_.diff_tmp[arm_.best_idx_t]
+                          // arm_data->T_arm_end[0][2] - arm_data_->T_arm_end[0][2],
+                          // arm_data->T_arm_end[1][2] - arm_data_->T_arm_end[1][2],
+                          // arm_data->T_arm_end[2][2] - arm_data_->T_arm_end[2][2],
+                          // arm_.clc_time[0],
+                          // arm_.clc_time[1],
+                          // arm_.clc_time[2],
+                          // arm_.clc_time[3]
         );
 
         OS::Task::SleepMilliseconds(1);
