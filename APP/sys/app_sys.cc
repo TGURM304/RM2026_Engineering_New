@@ -16,7 +16,7 @@
 #include "app_chassis.h"
 #include "app_gimbal.h"
 #include "app_conf.h"
-#include "app_arm.h"
+#include "app_arm_clc.h"
 #include "bsp_buzzer.h"
 
 #include <cstdio>
@@ -109,6 +109,7 @@ void bsp_hw_init() {
     bsp_can_init(E_CAN2, &hfdcan2);
     bsp_can_init(E_CAN3, &hfdcan3);
     bsp_uart_init(E_UART_DEBUG, &huart10);
+    // bsp_uart_init(E_UART_REFEREE, &huart1);
 }
 
 // 放一些系统级任务

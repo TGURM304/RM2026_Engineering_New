@@ -9,19 +9,10 @@
 
 #include <matrix.h>
 
+#include "app_arm_def.h"
+
 #define Joint_Max   0
 #define Joint_Min   1
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-    void app_arm_init();
-    void app_arm_task(void *argument);
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifdef __cplusplus
 /*
@@ -76,10 +67,6 @@ namespace arm {
     inline float wrapPi(float x) {
         return atan2f(sinf(x), cosf(x));
     }
-
-    enum JointModel {
-        Joint0, Joint1, Joint2, Joint3, Joint4, Joint5
-    };
 
     struct app_Arm_data_t {
         bool range_state{false};
@@ -262,7 +249,7 @@ namespace arm {
                 for (uint8_t j = 0; j < 6; j++) {
                     q_tmp[j] = wrapPi(thetax_8[j][i] - offset[j]);
                     arm_theta.raw_data[i][j] = q_tmp[j];
-                    if (q_tmp[j] < Lim[j][0] || q_tmp[j] > Lim[j][1]) {
+                    if (q_tmp[j] < ARM_JOINT_LIMITS.J[j].min_val || q_tmp[j] > ARM_JOINT_LIMITS.J[j].max_val) {
                         goto next_solution;
                     }
                 }
@@ -312,7 +299,7 @@ namespace arm {
             clc_time[3] = bsp_time_get_us() - lst_clc_time[3];
         }
 
-        const app_Arm_data_t *app_arm_data() {
+        const app_Arm_data_t *app_arm_get_data() {
             return &arm_theta;
         }
 
@@ -337,15 +324,6 @@ namespace arm {
         Matrixf<6, 6> Jacobi;
         Matrixf<6,1> cur_q;
         app_Arm_data_t arm_theta;
-
-        const float Lim[6][2] = {
-            {-M_PI, M_PI},
-            {0.0f, M_PI},
-            {0.0f, 150.0f * M_PI/180.0f},
-            {-M_PI, M_PI},
-            {-150.0f * M_PI/180.0f, 150.0f * M_PI/180.0f},
-            {-M_PI, M_PI}
-        };
     };
 
     /* 暂无动力学模型 */
@@ -357,3 +335,14 @@ namespace arm {
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    void app_arm_init();
+    void app_arm_task(void *argument);
+    const arm::app_Arm_data_t *app_arm_data();
+
+#ifdef __cplusplus
+}
+#endif

@@ -50,22 +50,22 @@ using namespace Controller;
 MotorController LU(std::make_unique <DJIMotor> (
 	"w_lu",
 	DJIMotor::M3508,
-	(DJIMotor::Param) { 0x01, E_CAN1, DJIMotor::CURRENT }
+	(DJIMotor::Param) { 0x01, E_CAN2, DJIMotor::CURRENT }
 ));
 MotorController LD(std::make_unique <DJIMotor> (
 	"w_ld",
 	DJIMotor::M3508,
-	(DJIMotor::Param) { 0x02, E_CAN1, DJIMotor::CURRENT }
+	(DJIMotor::Param) { 0x02, E_CAN2, DJIMotor::CURRENT }
 ));
 MotorController RD(std::make_unique <DJIMotor> (
 	"w_rd",
 	DJIMotor::M3508,
-	(DJIMotor::Param) { 0x03, E_CAN1, DJIMotor::CURRENT }
+	(DJIMotor::Param) { 0x03, E_CAN2, DJIMotor::CURRENT }
 ));
 MotorController RU(std::make_unique <DJIMotor> (
 	"w_ru",
 	DJIMotor::M3508,
-	(DJIMotor::Param) { 0x04, E_CAN1, DJIMotor::CURRENT }
+	(DJIMotor::Param) { 0x04, E_CAN2, DJIMotor::CURRENT }
 ));
 
 const auto ins = app_ins_data();
@@ -108,6 +108,7 @@ void app_chassis_task(void *args) {
 	// Wait for system init.
 	while(!app_sys_ready()) OS::Task::SleepMilliseconds(10);
 
+	gimbal.init();
 	// bsp_uart_set_callback(E_UART_DEBUG, set_target);
 	uint8_t send_count = 0;
 
@@ -120,9 +121,9 @@ void app_chassis_task(void *args) {
 
 		if (bsp_time_get_ms() - gimbal.timestamp < 100)
 		{
-			vx = -gimbal()->vy * 1.0;
-			vy = gimbal()->vx * 1.0;
-			rotate = gimbal()->rotate * 1.0;
+			vx = gimbal()->vx;
+			vy = gimbal()->vy;
+			rotate = gimbal()->rotate;
 		}else {
 			vx = vy = rotate = 0;
 		}
@@ -145,6 +146,7 @@ void app_chassis_task(void *args) {
 		);
 
 		OS::Task::SleepMilliseconds(1);
+		send_msg_to_gimbal();
 	}
 }
 
