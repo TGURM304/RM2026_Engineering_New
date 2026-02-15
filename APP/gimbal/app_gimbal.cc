@@ -85,6 +85,8 @@ const auto arm_clc = app_arm_data();
 
 float chassis_vx = 0, chassis_vy = 0;
 float chassis_rotate = 0;
+// 0: lift	1: right
+int8_t chassis_save_state[2] = {};
 
 //双板通信
 //收
@@ -94,7 +96,8 @@ void send_msg_to_chassis() {
     app_msg_gimbal_to_chassis pkg = {
         .vx = chassis_vx,
         .vy = chassis_vy,
-        .rotate = chassis_rotate
+        .rotate = chassis_rotate,
+        .save_state = {chassis_save_state[0], chassis_save_state[1]}
     };
     app_msg_can_send(E_CAN3, 0x066, pkg);
 }
@@ -107,7 +110,13 @@ void app_gimbal_task(void *args) {
 
     while((DM_Joint0.status.err & DM_Joint1.status.err & DM_Joint2.status.err & DM_Joint3.status.err &
         DM_Joint4.status.err & DM_Joint5.status.err & DM_Joint_End.status.err) != 1 ) {
-        app_gimbal_init();
+        DM_Joint0.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint1.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint2.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint3.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint4.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint5.enable(), OS::Task::SleepMilliseconds(1);
+        DM_Joint_End.enable();
         OS::Task::SleepMilliseconds(20);
     }
 
@@ -119,8 +128,11 @@ void app_gimbal_task(void *args) {
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
             chassis_rotate = 3.0f * rc->reserved;
+            chassis_save_state[0] = rc->s_l;
+            chassis_save_state[1] = rc->s_r;
         } else {
             chassis_vx = chassis_vy = chassis_rotate = 0;
+            chassis_save_state[0] = chassis_save_state[1] = false;
         }
 
         DM_Joint0.control(0, 0, 0, 0, 0);
@@ -131,6 +143,14 @@ void app_gimbal_task(void *args) {
         DM_Joint5.control(0, 0, 0, 0, 0);
         DM_Joint_End.control(0, 0, 0, 0, 0);
 
+        // DM_Joint0.control(0, 0, 0, 0, 0);
+        // DM_Joint1.control(0, 0, 0, 0, 2.66);
+        // DM_Joint2.control(0, 0, 0, 0, 3.6362);
+        // DM_Joint3.control(0, 0, 0, 0, 0);
+        // DM_Joint4.control(0, 0, 0, 0, 0.1742);
+        // DM_Joint5.control(0, 0, 0, 0, 0);
+        // DM_Joint_End.control(0, 0, 0, 0, 0);
+
         app_msg_vofa_send(E_UART_DEBUG,
             DM_Joint0.status.pos,
             DM_Joint1.status.pos,
@@ -139,12 +159,14 @@ void app_gimbal_task(void *args) {
             DM_Joint4.status.pos,
             DM_Joint5.status.pos,
             DM_Joint_End.status.pos,
-            arm_clc->upd_angle[0][0] * 180/M_PI,
-            arm_clc->upd_angle[1][0] * 180/M_PI,
-            arm_clc->upd_angle[2][0] * 180/M_PI,
-            arm_clc->upd_angle[3][0] * 180/M_PI,
-            arm_clc->upd_angle[4][0] * 180/M_PI,
-            arm_clc->upd_angle[5][0] * 180/M_PI
+            rc->s_r,
+            chassis_save_state[1]
+            // arm_clc->upd_angle[0][0] * 180/M_PI,
+            // arm_clc->upd_angle[1][0] * 180/M_PI,
+            // arm_clc->upd_angle[2][0] * 180/M_PI,
+            // arm_clc->upd_angle[3][0] * 180/M_PI,
+            // arm_clc->upd_angle[4][0] * 180/M_PI,
+            // arm_clc->upd_angle[5][0] * 180/M_PI
         );
 
         OS::Task::SleepMilliseconds(1);
@@ -153,11 +175,13 @@ void app_gimbal_task(void *args) {
 }
 
 void app_gimbal_init() {
-    DM_Joint0.init(), DM_Joint1.init(), DM_Joint2.init(), DM_Joint3.init();
-    DM_Joint4.init(), DM_Joint5.init(), DM_Joint_End.init();
-
-    DM_Joint0.enable(), DM_Joint1.enable(), DM_Joint2.enable(), DM_Joint3.enable();
-    DM_Joint4.enable(), DM_Joint5.enable(), DM_Joint_End.enable();
+    DM_Joint0.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint1.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint2.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint3.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint4.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint5.init(), OS::Task::SleepMilliseconds(1);
+    DM_Joint_End.init(), OS::Task::SleepMilliseconds(1);
 }
 
 #endif

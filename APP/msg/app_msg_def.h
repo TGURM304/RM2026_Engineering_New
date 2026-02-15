@@ -8,6 +8,7 @@
 
 struct app_msg_gimbal_to_chassis {
     float vx, vy, rotate;
+    int8_t save_state[2];
 
 } __attribute__((packed));
 

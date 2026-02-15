@@ -67,12 +67,22 @@ MotorController RU(std::make_unique <DJIMotor> (
 	DJIMotor::M3508,
 	(DJIMotor::Param) { 0x04, E_CAN2, DJIMotor::CURRENT }
 ));
+MotorController Save_L(std::make_unique <DJIMotor> (
+	"save_left",
+	DJIMotor::M2006,
+	(DJIMotor::Param) { 0x01, E_CAN1, DJIMotor::CURRENT }
+));
+MotorController Save_R(std::make_unique <DJIMotor> (
+	"save_right",
+	DJIMotor::M2006,
+	(DJIMotor::Param) { 0x02, E_CAN1, DJIMotor::CURRENT }
+));
 
 const auto ins = app_ins_data();
 const auto rc = bsp_rc_data();
 
 // 直角坐标系下的底盘速度，符合人类直觉，y 轴正方向为机体前进方向。
-double vx = 0, vy = 0, v_basic =0,vmax = 0;
+double vx = 0, vy = 0;
 // 旋转速度
 double rotate = 0;
 
@@ -111,6 +121,8 @@ void app_chassis_task(void *args) {
 	gimbal.init();
 	// bsp_uart_set_callback(E_UART_DEBUG, set_target);
 	uint8_t send_count = 0;
+	int8_t save_state[2];
+	// 0: lift	1: right
 
 	while(true) {
 
@@ -124,8 +136,11 @@ void app_chassis_task(void *args) {
 			vx = gimbal()->vx;
 			vy = gimbal()->vy;
 			rotate = gimbal()->rotate;
+			save_state[0] = gimbal()->save_state[0];
+			save_state[1] = gimbal()->save_state[1];
 		}else {
 			vx = vy = rotate = 0;
+			save_state[0] = save_state[1] = false;
 		}
 
 		auto theta = std::atan2(vy, vx), r = std::sqrt((vx * vx) + (vy * vy));
@@ -133,16 +148,26 @@ void app_chassis_task(void *args) {
 		// theta -= ins->yaw / 180 * M_PI;//底盘陀螺仪的小陀螺结算
 		vx = r * std::cos(theta), vy = r * std::sin(theta);
 
+		// lift
+		if(save_state[0] == 1) Save_L.update(1000);
+		else if(save_state[0] == -1) Save_L.update(-1000);
+		else Save_L.update(0);
+
+		// right
+		if(save_state[1] == 1) Save_R.update(1000);
+		else if(save_state[1] == -1) Save_R.update(-1000);
+		else Save_R.update(0);
+
 		motor_update(vx, vy, rotate);
 
 		app_msg_vofa_send(E_UART_DEBUG,
 			vx,
 			vy,
 			rotate,
-			LD.device()->angle,
-			LU.device()->angle,
-			RD.device()->angle,
-			RU.device()->angle
+			gimbal()->save_state[0],
+			gimbal()->save_state[1],
+			Save_L.speed,
+			Save_R.speed
 		);
 
 		OS::Task::SleepMilliseconds(1);
@@ -152,6 +177,7 @@ void app_chassis_task(void *args) {
 
 void app_chassis_init() {
 	LU.init(); LD.init(); RU.init(); RD.init();
+	Save_L.init(); Save_R.init();
 
 	LU.add_controller(std::make_unique <MotorBasePID> (
 		MotorBasePID::PID_SPEED,
@@ -173,6 +199,17 @@ void app_chassis_init() {
 		std::make_unique <PID> (14.5, 0.08, 0.03, 16384, 1000),
 		nullptr
 		));
+
+	Save_L.add_controller(std::make_unique <MotorBasePID> (
+		MotorBasePID::PID_SPEED,
+		std::make_unique <PID> (10.5, 0.08, 0.03, 16384, 1000),
+		nullptr
+	));
+	Save_R.add_controller(std::make_unique <MotorBasePID> (
+		MotorBasePID::PID_SPEED,
+		std::make_unique <PID> (10.5, 0.08, 0.03, 16384, 1000),
+		nullptr
+	));
 
 	// LU.relax(); LD.relax(); RU.relax(); RD.relax();
 
