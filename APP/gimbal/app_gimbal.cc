@@ -152,21 +152,25 @@ void app_gimbal_task(void *args) {
         // DM_Joint_End.control(0, 0, 0, 0, 0);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            DM_Joint0.status.pos,
-            DM_Joint1.status.pos,
-            DM_Joint2.status.pos,
-            DM_Joint3.status.pos,
-            DM_Joint4.status.pos,
-            DM_Joint5.status.pos,
-            DM_Joint_End.status.pos,
-            rc->s_r,
-            chassis_save_state[1]
+            // DM_Joint0.status.pos,
+            // DM_Joint1.status.pos,
+            // DM_Joint2.status.pos,
+            // DM_Joint3.status.pos,
+            // DM_Joint4.status.pos,
+            // DM_Joint5.status.pos,
+            // DM_Joint_End.status.pos,
+            // rc->s_r,
+            // chassis_save_state[1]
             // arm_clc->upd_angle[0][0] * 180/M_PI,
             // arm_clc->upd_angle[1][0] * 180/M_PI,
             // arm_clc->upd_angle[2][0] * 180/M_PI,
             // arm_clc->upd_angle[3][0] * 180/M_PI,
             // arm_clc->upd_angle[4][0] * 180/M_PI,
             // arm_clc->upd_angle[5][0] * 180/M_PI
+            arm_clc->clc_time[0],
+            arm_clc->clc_time[1],
+            arm_clc->clc_time[2],
+            arm_clc->clc_time[3]
         );
 
         OS::Task::SleepMilliseconds(1);

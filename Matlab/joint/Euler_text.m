@@ -35,8 +35,8 @@ L4.r = p43; L5.r = p54; L6.r = p65;
  
 robot = SerialLink([L1, L2, L3, L4, L5, L6]); 
 robot.name='My_Robot';
-theta = [0, 60, -20, 0, -30, 0]*pi/180;
-qd = [0 0 0 0 0 0]; qdd = [0 0 0 0 0 0];
+theta = [50.2,40.5,112.17,40.12,56.21,70.7]*pi/180;
+qd = [0 1 0 1 0 0]; qdd = [0 0 0 1 0 0];
 tau_N = NewtonEuler(theta*180/pi, qd', qdd', m, a2, a3, d2, d4);
 tau = robot.rne(theta, qd, qdd, [0 0 9.8]);
 [tau_N;tau]

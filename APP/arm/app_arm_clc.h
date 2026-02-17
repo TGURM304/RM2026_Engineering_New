@@ -13,6 +13,7 @@
 
 #define Joint_Max   0
 #define Joint_Min   1
+#define Arm_G       9.80665
 
 #ifdef __cplusplus
 /*
@@ -20,35 +21,6 @@
  */
 namespace arm {
     //统一使用弧度制
-
-    // 改进 DH 旋转矩阵
-    // 参数：a - 连杆长度, alpha - 连杆扭角, d - 连杆偏移, theta - 关节角度
-    inline Matrixf<4, 4> dh_trans(float a, float alpha, float d, float theta) {
-        Matrixf<4, 4> DHTrans;
-
-        float cos_theta = cosf(theta), sin_theta = sinf(theta);
-        float cos_alpha = cosf(alpha), sin_alpha = sinf(alpha);
-
-        DHTrans[0][0] = cos_theta;
-        DHTrans[0][1] = -sin_theta;
-        DHTrans[0][2] = 0.0f;
-        DHTrans[0][3] = a;
-
-        DHTrans[1][0] = sin_theta * cos_alpha;
-        DHTrans[1][1] = cos_theta * cos_alpha;
-        DHTrans[1][2] = -sin_alpha;
-        DHTrans[1][3] = -d * sin_alpha;
-
-        DHTrans[2][0] = sin_theta * sin_alpha;
-        DHTrans[2][1] = cos_theta * sin_alpha;
-        DHTrans[2][2] = cos_alpha;
-        DHTrans[2][3] = d * cos_alpha;
-
-        DHTrans[3][0] = DHTrans[3][1] = DHTrans[3][2] = 0.0f;
-        DHTrans[3][3] = 1.0f;
-
-        return DHTrans;
-    }
 
     // 获取Position
     inline Matrixf<3, 1> pos_from_T(const Matrixf<4, 4>& T) {
@@ -75,14 +47,20 @@ namespace arm {
         Matrixf<6, 6> J_arm;
         Matrixf<8, 6> raw_data, cur_angle;
         Matrixf<6, 1> upd_angle;
+        Matrixf<6, 1> upd_tar;
+        uint32_t clc_time[5] = {};
     };
 
-    class Kinematics {
+    class Arm_link {
         public:
-        Kinematics();
-        Kinematics(float const a2_, float const a3_, float const d2_, float const d4_,
-            const Matrixf<4, 4>& base_, const Matrixf<4, 4>& tool_)
-            : a2(a2_), a3(a3_), d2(d2_), d4(d4_), Base(base_), Tool(tool_) {
+        Arm_link() = default;
+        Arm_link(const Link links_[6], const Matrixf<4, 4>& base_, const Matrixf<4, 4>& tool_)
+            :Base(base_), Tool(tool_) {
+            for (uint8_t i = 0; i < 6; i++) {
+                links[i] = links_[i];   // 逐个拷贝
+            }
+            a2 = links[2].a(); a3 = links[3].a();
+            d2 = links[1].d(); d4 = links[3].d();
             arm_theta.cur_angle = arm_theta.raw_data = matrixf::zeros<8, 6>();
             Base_inv = matrixf::inv(Base), Tool_inv = matrixf::inv(Tool);
         }
@@ -92,21 +70,14 @@ namespace arm {
             lst_clc_time[0] = bsp_time_get_us();
             for(uint8_t i =0; i<6; i++) {
                 cur_q[i][0] = tem_q[i][0];
+                T_joint[i] = links[i].T(cur_q[i][0]);
             }
-            cur_q[2][0] += M_PI_2;
-
-            T_joint[0] = dh_trans(0.0f,    0.0f,       0.0f,    cur_q[0][0]);
-            T_joint[1] = dh_trans(0.0f,    M_PI_2,     d2,      cur_q[1][0]);
-            T_joint[2] = dh_trans(a2,      0.0f,       0.0f,    cur_q[2][0]);
-            T_joint[3] = dh_trans(a3,      M_PI_2,     d4,      cur_q[3][0]);
-            T_joint[4] = dh_trans(0.0f,    -M_PI_2,    0.0f,    cur_q[4][0]);
-            T_joint[5] = dh_trans(0.0f,    M_PI_2,     0.0f,    cur_q[5][0]);
 
             T_ = T_joint[0] * T_joint[1] * T_joint[2] * T_joint[3] * T_joint[4] * T_joint[5];
             T_end = Base * T_ * Tool;
             arm_theta.T_arm_end = T_end;
 
-            clc_time[0] = bsp_time_get_us() - lst_clc_time[0];
+            arm_theta.clc_time[0] = clc_time[0] = bsp_time_get_us() - lst_clc_time[0];
         }
 
         // 雅可比矩阵计算
@@ -133,10 +104,73 @@ namespace arm {
             set_col(Jacobi, 5, matrixf::zeros<3, 1>(), Z6);
             arm_theta.J_arm = Jacobi;
 
-            clc_time[2] = bsp_time_get_us() - lst_clc_time[2];
+            arm_theta.clc_time[2] = clc_time[2] = bsp_time_get_us() - lst_clc_time[2];
         }
 
-        // 逆运动学解算
+        // 逆动力学解算
+        void arm_newton_euler_clc(const Matrixf<6, 1>& theta,
+            const Matrixf<6, 1>& theta_d, const Matrixf<6, 1>& theta_dd) {
+
+            lst_clc_time[3] = bsp_time_get_us();
+
+            Matrixf<3, 1> z = matrixf::zeros<3, 1>();
+            z[2][0] = 1.0f;
+
+            Matrixf<3, 7> w = matrixf::zeros<3, 7>(), wd = matrixf::zeros<3, 7>(), vd = matrixf::zeros<3, 7>();
+            vd[2][0] = Arm_G;
+            Matrixf<3, 6> F = matrixf::zeros<3, 6>(), N = matrixf::zeros<3, 6>();
+
+            // 内推：连杆 1→6
+            for (uint8_t i = 0; i < 6; i++) {
+                Matrixf<4, 4> T_im1_i = links[i].T(theta[i][0]);
+                Matrixf<3, 1> p_im1_i = pos_from_T(T_im1_i);
+                Matrixf<3, 3> R_im1_i = T_im1_i.block<3, 3>(0, 0);
+                Matrixf<3, 3> R_i_im1 = R_im1_i.trans();
+                Matrixf<3, 1> w_im1 = w.col(i), wd_im1 = wd.col(i), vd_im1 = vd.col(i);
+
+                Matrixf<3, 1> w_i = R_i_im1 * w_im1 + theta_d[i][0] * z;
+                Matrixf<3, 1> wd_i = R_i_im1 * wd_im1
+                    + vector3f::cross(R_i_im1 * w_im1, theta_d[i][0] * z) + theta_dd[i][0] * z;
+                Matrixf<3, 1> vd_i = R_i_im1 * (vector3f::cross(wd_im1, p_im1_i)
+                    + vector3f::cross(w_im1, vector3f::cross(w_im1, p_im1_i)) + vd_im1);
+                Matrixf<3, 1> pc_i = links[i].rc();
+                Matrixf<3, 1> vcd_i = vector3f::cross(wd_i, pc_i)
+                    + vector3f::cross(w_i, vector3f::cross(w_i, pc_i)) + vd_i;
+
+                Matrixf<3, 1> F_i = links[i].m() * vcd_i;
+                Matrixf<3, 1> N_i = links[i].I() * wd_i + vector3f::cross(w_i, links[i].I() * w_i);
+
+                for (int r = 0; r < 3; r++) {
+                    w[r][i + 1] = w_i[r][0];
+                    wd[r][i + 1] = wd_i[r][0];
+                    vd[r][i + 1] = vd_i[r][0];
+                    F[r][i] = F_i[r][0];
+                    N[r][i] = N_i[r][0];
+                }
+            }
+
+            // 外推：连杆 6→1
+            tau_t = matrixf::zeros<6, 1>();
+            Matrixf<3, 1> f = F.col(5), n = N.col(5)
+                + vector3f::cross(links[5].rc(), F.col(5));
+            tau_t[5][0] = (n.trans() * z)[0][0];
+
+            for (int8_t i = 4; i >= 0; i--) {
+                Matrixf<4, 4> T_i1_i = links[i+1].T(theta[i+1][0]);  // T_{i+1}^i
+                Matrixf<3, 3> R_i1_i = T_i1_i.block<3, 3>(0, 0);
+                Matrixf<3, 1> p_i1_i = pos_from_T(T_i1_i);
+                Matrixf<3, 1> f_next = R_i1_i * f + F.col(i);
+                n = N.col(i) + R_i1_i * n + vector3f::cross(links[i].rc(), F.col(i))
+                    + vector3f::cross(p_i1_i, R_i1_i * f);
+                tau_t[i][0] = (n.trans() * z)[0][0];
+                f = f_next;
+            }
+
+            arm_theta.upd_tar = tau_t;
+            arm_theta.clc_time[3] = clc_time[3] = bsp_time_get_us() - lst_clc_time[3];
+        }
+
+        // 逆运动学解算       本机械臂特殊化，不存在通用的可能性
         void arm_inverse_clc(const Matrixf<4, 4>& T_target) {
             lst_clc_time[1] = bsp_time_get_us();
 
@@ -262,12 +296,12 @@ namespace arm {
             }
             arm_theta.validCount = validCount;
 
-            clc_time[1] = bsp_time_get_us() - lst_clc_time[1];
+            arm_theta.clc_time[1] = clc_time[1] = bsp_time_get_us() - lst_clc_time[1];
         }
 
         // 解的选择
         void select_angle() {
-            lst_clc_time[3] = bsp_time_get_us();
+            lst_clc_time[4] = bsp_time_get_us();
             if (validCount == 0) arm_theta.upd_angle = matrixf::zeros<6, 1>();
 
             float min_dist = 1e10f;
@@ -296,15 +330,15 @@ namespace arm {
 
             best_idx_t = best_idx;
             arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
-            clc_time[3] = bsp_time_get_us() - lst_clc_time[3];
+            arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
         }
 
         const app_Arm_data_t *app_arm_get_data() {
             return &arm_theta;
         }
 
-        uint32_t clc_time[4] = {};
-        uint32_t lst_clc_time[4] = {};
+        uint32_t clc_time[5] = {};
+        uint32_t lst_clc_time[5] = {};
         int16_t diff_tmp[8] = {};
         uint8_t best_idx_t = 0;
 
@@ -316,22 +350,17 @@ namespace arm {
         }
 
         float a2, a3, d2, d4;
+        Link links[6];
         uint8_t validCount = 0;
         Matrixf<4,4> Base, Tool;
         Matrixf<4,4> Base_inv, Tool_inv;
         Matrixf<4,4> T_joint[6];
         Matrixf<4, 4> T_, T_end;
         Matrixf<6, 6> Jacobi;
+        Matrixf<6, 1> tau_t;
         Matrixf<6,1> cur_q;
         app_Arm_data_t arm_theta;
     };
-
-    /* 暂无动力学模型 */
-
-    // class Dynamic {
-    //     public:
-    // private:
-    // };
 }
 #endif
 
