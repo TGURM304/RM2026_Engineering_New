@@ -81,7 +81,18 @@ DMMotor DM_Joint_End("Joint_end",DMMotor::J4310,{
 
 const auto ins = app_ins_data();
 const auto rc = bsp_rc_data();
-const auto arm_clc = app_arm_data();
+gimbal_arm_t gimbal_arm = {
+    .angle_upd = false,
+    .end_angle = 0,
+    .tar_q = {0, 0, 0, 0, 0, 0},
+    .q_data = {0, 0, 0, 0, 0, 0},
+    .q_d = {0, 0, 0, 0, 0, 0},
+    .q_dd = {0, 0, 0, 0, 0, 0}
+};
+
+const gimbal_arm_t *gimbal_arm_data() {
+    return &gimbal_arm;
+}
 
 float chassis_vx = 0, chassis_vy = 0;
 float chassis_rotate = 0;
@@ -108,6 +119,8 @@ void app_gimbal_task(void *args) {
     while(!app_sys_ready())
         OS::Task::SleepMilliseconds(10);
 
+    const auto arm_clc = app_arm_data();
+
     while((DM_Joint0.status.err & DM_Joint1.status.err & DM_Joint2.status.err & DM_Joint3.status.err &
         DM_Joint4.status.err & DM_Joint5.status.err & DM_Joint_End.status.err) != 1 ) {
         DM_Joint0.enable(), OS::Task::SleepMilliseconds(1);
@@ -133,14 +146,24 @@ void app_gimbal_task(void *args) {
         } else {
             chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
+            gimbal_arm.angle_upd = false;
         }
 
-        DM_Joint0.control(0, 0, 0, 0, 0);
-        DM_Joint1.control(0, 0, 0, 0, 0);
-        DM_Joint2.control(0, 0, 0, 0, 0);
-        DM_Joint3.control(0, 0, 0, 0, 0);
-        DM_Joint4.control(0, 0, 0, 0, 0);
-        DM_Joint5.control(0, 0, 0, 0, 0);
+        gimbal_arm.q_data[0] = DM_Joint0.status.pos;
+        gimbal_arm.q_data[1] = -(DM_Joint1.status.pos - 90.0f * M_PI / 180);
+        gimbal_arm.q_data[2] = DM_Joint2.status.pos - 90.0f * M_PI / 180;
+        gimbal_arm.q_data[3] = DM_Joint3.status.pos;
+        gimbal_arm.q_data[4] = DM_Joint4.status.pos;
+        gimbal_arm.q_data[5] = DM_Joint5.status.pos;
+        gimbal_arm.end_angle = DM_Joint_End.status.pos;
+        gimbal_arm.angle_upd = true;
+
+        DM_Joint0.control(0, 0, 0, 0, arm_clc->upd_tar[0][0]);
+        DM_Joint1.control(0, 0, 0, 0, -arm_clc->upd_tar[1][0]*1.0);
+        DM_Joint2.control(0, 0, 0, 0, arm_clc->upd_tar[2][0]*1.0);
+        DM_Joint3.control(0, 0, 0, 0, arm_clc->upd_tar[3][0]*1.0);
+        DM_Joint4.control(0, 0, 0, 0, arm_clc->upd_tar[4][0]*1.0);
+        DM_Joint5.control(0, 0, 0, 0, arm_clc->upd_tar[5][0]*1.0);
         DM_Joint_End.control(0, 0, 0, 0, 0);
 
         // DM_Joint0.control(0, 0, 0, 0, 0);
@@ -152,25 +175,21 @@ void app_gimbal_task(void *args) {
         // DM_Joint_End.control(0, 0, 0, 0, 0);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            // DM_Joint0.status.pos,
-            // DM_Joint1.status.pos,
-            // DM_Joint2.status.pos,
-            // DM_Joint3.status.pos,
-            // DM_Joint4.status.pos,
-            // DM_Joint5.status.pos,
-            // DM_Joint_End.status.pos,
+            gimbal_arm.q_data[0] * 180/M_PI,
+            gimbal_arm.q_data[1] * 180/M_PI,
+            gimbal_arm.q_data[2] * 180/M_PI,
+            gimbal_arm.q_data[3] * 180/M_PI,
+            gimbal_arm.q_data[4] * 180/M_PI,
+            gimbal_arm.q_data[5] * 180/M_PI,
+            // DM_Joint_End.status.pos * 180/M_PI,
             // rc->s_r,
             // chassis_save_state[1]
-            // arm_clc->upd_angle[0][0] * 180/M_PI,
-            // arm_clc->upd_angle[1][0] * 180/M_PI,
-            // arm_clc->upd_angle[2][0] * 180/M_PI,
-            // arm_clc->upd_angle[3][0] * 180/M_PI,
-            // arm_clc->upd_angle[4][0] * 180/M_PI,
-            // arm_clc->upd_angle[5][0] * 180/M_PI
-            arm_clc->clc_time[0],
-            arm_clc->clc_time[1],
-            arm_clc->clc_time[2],
-            arm_clc->clc_time[3]
+            arm_clc->upd_tar[0][0],
+            arm_clc->upd_tar[1][0],
+            arm_clc->upd_tar[2][0],
+            arm_clc->upd_tar[3][0],
+            arm_clc->upd_tar[4][0],
+            arm_clc->upd_tar[5][0]
         );
 
         OS::Task::SleepMilliseconds(1);

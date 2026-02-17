@@ -44,9 +44,7 @@ namespace arm {
         float clamp_pos{0.f};
         ArmState arm_state{ArmState::Relax};
         ClampState clamp_state{ClampState::Open};
-    };
-
-    // 目标状态
+    };    // 目标状态
     struct ctrl_out_data_t {
         Matrixf<6, 1> pos_ref;
         ClampState clamp_state{ClampState::Open};

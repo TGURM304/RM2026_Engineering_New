@@ -41,6 +41,7 @@ namespace arm {
     }
 
     struct app_Arm_data_t {
+        bool angle_upd{false};
         bool range_state{false};
         uint8_t validCount{};
         Matrixf<4, 4> T_arm_end;
@@ -116,23 +117,31 @@ namespace arm {
             Matrixf<3, 1> z = matrixf::zeros<3, 1>();
             z[2][0] = 1.0f;
 
+            Matrixf<4, 4> T_ne[6];
+            Matrixf<3, 1> p_ne[6];
+            for (uint8_t i = 0; i < 6; i++) {
+                T_ne[i] = links[i].T(theta[i][0]);
+                p_ne[i] = pos_from_T(T_ne[i]);
+            }
+
             Matrixf<3, 7> w = matrixf::zeros<3, 7>(), wd = matrixf::zeros<3, 7>(), vd = matrixf::zeros<3, 7>();
             vd[2][0] = Arm_G;
             Matrixf<3, 6> F = matrixf::zeros<3, 6>(), N = matrixf::zeros<3, 6>();
 
             // 内推：连杆 1→6
             for (uint8_t i = 0; i < 6; i++) {
-                Matrixf<4, 4> T_im1_i = links[i].T(theta[i][0]);
-                Matrixf<3, 1> p_im1_i = pos_from_T(T_im1_i);
-                Matrixf<3, 3> R_im1_i = T_im1_i.block<3, 3>(0, 0);
-                Matrixf<3, 3> R_i_im1 = R_im1_i.trans();
+                Matrixf<3, 3> R_i_im1;
+                for (int r = 0; r < 3; r++)
+                    for (int c = 0; c < 3; c++)
+                        R_i_im1[r][c] = T_ne[i][c][r];
                 Matrixf<3, 1> w_im1 = w.col(i), wd_im1 = wd.col(i), vd_im1 = vd.col(i);
 
-                Matrixf<3, 1> w_i = R_i_im1 * w_im1 + theta_d[i][0] * z;
+                Matrixf<3, 1> R_w_im1 = R_i_im1 * w_im1;
+                Matrixf<3, 1> w_i = R_w_im1 + theta_d[i][0] * z;
                 Matrixf<3, 1> wd_i = R_i_im1 * wd_im1
-                    + vector3f::cross(R_i_im1 * w_im1, theta_d[i][0] * z) + theta_dd[i][0] * z;
-                Matrixf<3, 1> vd_i = R_i_im1 * (vector3f::cross(wd_im1, p_im1_i)
-                    + vector3f::cross(w_im1, vector3f::cross(w_im1, p_im1_i)) + vd_im1);
+                    + vector3f::cross(R_w_im1, theta_d[i][0] * z) + theta_dd[i][0] * z;
+                Matrixf<3, 1> vd_i = R_i_im1 * (vector3f::cross(wd_im1, p_ne[i])
+                    + vector3f::cross(w_im1, vector3f::cross(w_im1, p_ne[i])) + vd_im1);
                 Matrixf<3, 1> pc_i = links[i].rc();
                 Matrixf<3, 1> vcd_i = vector3f::cross(wd_i, pc_i)
                     + vector3f::cross(w_i, vector3f::cross(w_i, pc_i)) + vd_i;
@@ -150,18 +159,16 @@ namespace arm {
             }
 
             // 外推：连杆 6→1
-            tau_t = matrixf::zeros<6, 1>();
             Matrixf<3, 1> f = F.col(5), n = N.col(5)
                 + vector3f::cross(links[5].rc(), F.col(5));
             tau_t[5][0] = (n.trans() * z)[0][0];
 
             for (int8_t i = 4; i >= 0; i--) {
-                Matrixf<4, 4> T_i1_i = links[i+1].T(theta[i+1][0]);  // T_{i+1}^i
-                Matrixf<3, 3> R_i1_i = T_i1_i.block<3, 3>(0, 0);
-                Matrixf<3, 1> p_i1_i = pos_from_T(T_i1_i);
-                Matrixf<3, 1> f_next = R_i1_i * f + F.col(i);
+                Matrixf<3, 3> R_i1_i = T_ne[i + 1].block<3, 3>(0, 0);
+                Matrixf<3, 1> Rf = R_i1_i * f;
+                Matrixf<3, 1> f_next = Rf + F.col(i);
                 n = N.col(i) + R_i1_i * n + vector3f::cross(links[i].rc(), F.col(i))
-                    + vector3f::cross(p_i1_i, R_i1_i * f);
+                    + vector3f::cross(p_ne[i + 1], Rf);
                 tau_t[i][0] = (n.trans() * z)[0][0];
                 f = f_next;
             }
@@ -331,6 +338,10 @@ namespace arm {
             best_idx_t = best_idx;
             arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
             arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
+        }
+
+        void change_a_upd_state(bool state) {
+            arm_theta.angle_upd = state;
         }
 
         const app_Arm_data_t *app_arm_get_data() {

@@ -16,6 +16,8 @@
 
 #include <sys/types.h>
 
+#include "app_gimbal.h"
+
 #ifdef COMPILE_ARM
 
 static arm::Link g_arm_links[6];
@@ -72,17 +74,18 @@ static void arm_links_init() {
     pc5[0][0] = -0.0013f; pc5[1][0] = -0.0017f; pc5[2][0] = -0.0025f;
     pc6[0][0] = 0.00001f; pc6[1][0] = 0.00018f; pc6[2][0] = 0.0456f;
 
-    float m1 = 1.143f, m2 = 0.777f, m3 = 1.82f, m4 = 0.596f, m5 = 0.471f, m6 = 0.376f;
+    float m1 = 1.143f, m2 = 0.777f + 0.1f, m3 = 1.82f + 0.2f, m4 = 0.596f + 0.3f, m5 = 0.471f + 0.1f, m6 = 0.376f + 0.17f;
 
-    g_arm_links[0] = arm::Link(0.0f,   0.0f,    0.0f,   0.0f, arm::Revolute, 0.0f,   -M_PI,      M_PI,      m1, pc1, I1);
-    g_arm_links[1] = arm::Link(0.0f,   M_PI_2,  arm_d2, 0.0f, arm::Revolute, 0.0f,   0.0f,       M_PI,      m2, pc2, I2);
-    g_arm_links[2] = arm::Link(arm_a2, 0.0f,    0.0f,   0.0f, arm::Revolute, M_PI_2, 0.0f,       150.0f*c_, m3, pc3, I3);
-    g_arm_links[3] = arm::Link(arm_a3, M_PI_2,  arm_d4, 0.0f, arm::Revolute, 0.0f,   -M_PI,      M_PI,      m4, pc4, I4);
-    g_arm_links[4] = arm::Link(0.0f,   -M_PI_2, 0.0f,   0.0f, arm::Revolute, 0.0f,   -120.0f*c_, 120.0f*c_, m5, pc5, I5);
-    g_arm_links[5] = arm::Link(0.0f,   M_PI_2,  0.0f,   0.0f, arm::Revolute, 0.0f,   -M_PI,      M_PI,      m6, pc6, I6);
+    g_arm_links[0] = arm::Link(0.0f,   0.0f,    0.0f,   0.0f, arm::Revolute, 0.0f,   -240.0f*c_, 245.0f*c_, m1, pc1, I1);
+    g_arm_links[1] = arm::Link(0.0f,   M_PI_2,  arm_d2, 0.0f, arm::Revolute, 0.0f,     67.0f*c_, 135.0f*c_, m2, pc2, I2);
+    g_arm_links[2] = arm::Link(arm_a2, 0.0f,    0.0f,   0.0f, arm::Revolute, M_PI_2, -137.0f*c_,  13.0f*c_, m3, pc3, I3);
+    g_arm_links[3] = arm::Link(arm_a3, M_PI_2,  arm_d4, 0.0f, arm::Revolute, 0.0f,   -175.0f*c_, 115.0f*c_, m4, pc4, I4);
+    g_arm_links[4] = arm::Link(0.0f,   -M_PI_2, 0.0f,   0.0f, arm::Revolute, 0.0f,    -80.0f*c_,  82.0f*c_, m5, pc5, I5);
+    g_arm_links[5] = arm::Link(0.0f,   M_PI_2,  0.0f,   0.0f, arm::Revolute, 0.0f,        -M_PI,      M_PI, m6, pc6, I6);
 }
 
 const arm::app_Arm_data_t* arm_data = nullptr;
+auto gimbal_data = gimbal_arm_data();
 
 // 静态任务，在 CubeMX 中配置
 void app_arm_task(void *args) {
@@ -95,49 +98,46 @@ void app_arm_task(void *args) {
         50.2f * M_PI / 180, 40.5f * M_PI / 180, 112.17f * M_PI / 180,
         40.12f * M_PI / 180, 56.21f * M_PI / 180, 70.7f * M_PI / 180
     };
+    float tar_q[6] = {0, 0, 0, 0, 0, 0};
+    float q_d[6] = {0, 1, 0, 1, 0, 0};
+    float q_dd[6] = {0, 0, 0, 1, 0, 0};
 
-    int8_t rng[6] = {};
+    // int8_t rng[6] = {};
 
     while(true) {
 
-        for(uint8_t i = 0; i < 6; i++) {
-            rng[i] = bsp_rng_random(-5, 5);
-            q_data[i] += rng[i] * 0.1 * M_PI / 180;
-            if (q_data[i] > arm::ARM_JOINT_LIMITS.J[i].max_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].max_val;
-            if (q_data[i] < arm::ARM_JOINT_LIMITS.J[i].min_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].min_val;
+        // for(uint8_t i = 0; i < 6; i++) {
+        //     rng[i] = bsp_rng_random(-5, 5);
+        //     q_data[i] += rng[i] * 0.1 * M_PI / 180;
+        //     if (q_data[i] > arm::ARM_JOINT_LIMITS.J[i].max_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].max_val;
+        //     if (q_data[i] < arm::ARM_JOINT_LIMITS.J[i].min_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].min_val;
+        // }
+
+        if(gimbal_data->angle_upd) {
+            memcpy(q_data, gimbal_data->q_data, sizeof(q_data));
+            memcpy(q_d, gimbal_data->q_d, sizeof(q_data));
+            memcpy(q_dd, gimbal_data->q_dd, sizeof(q_data));
+            arm_->change_a_upd_state(true);
         }
-
-        float q_d[6] = {0, 1, 0, 1, 0, 0};
-        float q_dd[6] = {0, 0, 0, 1, 0, 0};
-
         Matrixf<6, 1> tmp_q(q_data);
         Matrixf<6, 1> tmp_qd(q_d);
         Matrixf<6, 1> tmp_qdd(q_dd);
+
         arm_->arm_forward_clc(tmp_q);
         arm_->arm_inverse_clc(arm_data->T_arm_end);
         arm_->arm_jacobi_clc();
         arm_->select_angle();
         arm_->arm_newton_euler_clc(tmp_q, tmp_qd, tmp_qdd);
 
-        app_msg_vofa_send(E_UART_DEBUG,
-            // arm_data->upd_angle[0][0] * 180/M_PI,
-            // arm_data->upd_angle[1][0] * 180/M_PI,
-            // arm_data->upd_angle[2][0] * 180/M_PI,
-            // arm_data->upd_angle[3][0] * 180/M_PI,
-            // arm_data->upd_angle[4][0] * 180/M_PI,
-            // arm_data->upd_angle[5][0] * 180/M_PI,
-            arm_data->upd_tar[0][0],
-            arm_data->upd_tar[1][0],
-            arm_data->upd_tar[2][0],
-            arm_data->upd_tar[3][0],
-            arm_data->upd_tar[4][0],
-            arm_data->upd_tar[5][0],
-            arm_data->clc_time[0],
-            arm_data->clc_time[1],
-            arm_data->clc_time[2],
-            arm_data->clc_time[arm::NEWTON_EULER],
-            arm_data->clc_time[4]
-        );
+        // app_msg_vofa_send(E_UART_DEBUG,
+        //     gimbal_data->angle_upd,
+        //     gimbal_data->q_data[0],
+        //     gimbal_data->q_data[1],
+        //     gimbal_data->q_data[2],
+        //     gimbal_data->q_data[3],
+        //     gimbal_data->q_data[4],
+        //     gimbal_data->q_data[5]
+        //     );
 
         OS::Task::SleepMilliseconds(1);
     }

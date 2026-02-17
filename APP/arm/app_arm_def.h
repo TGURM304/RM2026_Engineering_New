@@ -43,13 +43,13 @@ namespace arm {
     };
 
     inline const ArmJointLimits ARM_JOINT_LIMITS = {
-        {{-M_PI, M_PI},
-         {0.0f, M_PI},
-         {0.0f, 150.0f * M_PI / 180.0f},
-         {-M_PI, M_PI},
-         {-150.0f * M_PI / 180.0f, 150.0f * M_PI / 180.0f},
+        {{-240.0f * M_PI / 180.0f, 245.0f * M_PI / 180.0f},
+         { -45.0f * M_PI / 180.0f,  23.0f * M_PI / 180.0f},
+         { -47.0f * M_PI / 180.0f, 103.0f * M_PI / 180.0f},
+         {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
+         { -80.0f * M_PI / 180.0f,  82.0f * M_PI / 180.0f},
          {-M_PI, M_PI}},
-        {-M_PI, M_PI}
+        {-75.0f * M_PI / 180.0f, -5.0f * M_PI / 180.0f}
     };
 
     // 改进 DH 旋转矩阵
