@@ -17,6 +17,7 @@
 #include <sys/types.h>
 
 #include "app_gimbal.h"
+#include "robotics.h"
 
 #ifdef COMPILE_ARM
 
@@ -74,7 +75,7 @@ static void arm_links_init() {
     pc5[0][0] = -0.0013f; pc5[1][0] = -0.0017f; pc5[2][0] = -0.0025f;
     pc6[0][0] = 0.00001f; pc6[1][0] = 0.00018f; pc6[2][0] = 0.0456f;
 
-    float m1 = 1.143f, m2 = 0.777f + 0.1f, m3 = 1.82f + 0.2f, m4 = 0.596f + 0.3f, m5 = 0.471f + 0.1f, m6 = 0.376f + 0.17f;
+    float m1 = 1.143f, m2 = 0.777f + 0.3f, m3 = 1.82f + 0.2f, m4 = 0.596f + 0.3f, m5 = 0.471f + 0.1f, m6 = 0.376f + 0.17f;
 
     g_arm_links[0] = arm::Link(0.0f,   0.0f,    0.0f,   0.0f, arm::Revolute, 0.0f,   -240.0f*c_, 245.0f*c_, m1, pc1, I1);
     g_arm_links[1] = arm::Link(0.0f,   M_PI_2,  arm_d2, 0.0f, arm::Revolute, 0.0f,     67.0f*c_, 135.0f*c_, m2, pc2, I2);
@@ -101,6 +102,7 @@ void app_arm_task(void *args) {
     float tar_q[6] = {0, 0, 0, 0, 0, 0};
     float q_d[6] = {0, 1, 0, 1, 0, 0};
     float q_dd[6] = {0, 0, 0, 1, 0, 0};
+    float xyz[3] = {}, rpy[3] = {};
 
     // int8_t rng[6] = {};
 
@@ -117,15 +119,22 @@ void app_arm_task(void *args) {
             memcpy(q_data, gimbal_data->q_data, sizeof(q_data));
             memcpy(q_d, gimbal_data->q_d, sizeof(q_data));
             memcpy(q_dd, gimbal_data->q_dd, sizeof(q_data));
+            memcpy(xyz, gimbal_data->tar_xyz, sizeof(xyz));
+            memcpy(rpy, gimbal_data->tar_rpy, sizeof(rpy));
             arm_->change_a_upd_state(true);
-        }
+        }else arm_->change_a_upd_state(false);
+
         Matrixf<6, 1> tmp_q(q_data);
         Matrixf<6, 1> tmp_qd(q_d);
         Matrixf<6, 1> tmp_qdd(q_dd);
+        Matrixf<3, 1> t_p(xyz);
+        Matrixf<3, 1> t_rpy(rpy);
+        Matrixf<3, 3> t_R = robotics::rpy2r(rpy);
+        Matrixf<4, 4> tar_T = robotics::rp2t(t_R, t_p);
 
         arm_->arm_forward_clc(tmp_q);
-        arm_->arm_inverse_clc(arm_data->T_arm_end);
-        arm_->arm_jacobi_clc();
+        // arm_->arm_jacobi_clc();
+        arm_->arm_inverse_clc(tar_T);
         arm_->select_angle();
         arm_->arm_newton_euler_clc(tmp_q, tmp_qd, tmp_qdd);
 

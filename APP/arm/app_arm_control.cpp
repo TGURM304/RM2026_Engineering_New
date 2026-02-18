@@ -6,24 +6,38 @@
 
 #include <cmath>
 
+#include "sys_task.h"
+
 namespace arm {
 
     void ArmController::init() {
         for (uint8_t i = 0; i < 7; i++) {
-            if(joints_[i]) joints_[i]->init();
+            if(joints_[i]) {
+                joints_[i]->init();
+                OS::Task::SleepMilliseconds(1);
+            }
         }
+        arm_state_ = ArmState::Waiting;
     }
 
     void ArmController::disable() {
         for (uint8_t i = 0; i < 7; i++) {
-            if(joints_[i]) joints_[i]->disable();
+            if(joints_[i]) {
+                joints_[i]->disable();
+                OS::Task::SleepMilliseconds(1);
+            }
         }
+        arm_state_ = ArmState::Relax;
     }
 
     void ArmController::enable() {
         for (uint8_t i = 0; i < 7; i++) {
-            if(joints_[i]) joints_[i]->enable();
+            if(joints_[i]) {
+                joints_[i]->enable();
+                OS::Task::SleepMilliseconds(1);
+            }
         }
+        arm_state_ = ArmState::Working;
     }
 
     void ArmController::update(const ctrl_out_data_t& arm_cmd) {
@@ -40,19 +54,23 @@ namespace arm {
         // 暂未完善保护
 
         // 位置超限失能保护
+        float lim = 5*M_PI/180;
         for (uint8_t i = 0; i < 6; i++) {
             if (!joints_[i]) continue;
             float pos = joints_[i]->status.pos;
-            if (pos < ARM_JOINT_LIMITS.J[i].min_val || pos > ARM_JOINT_LIMITS.J[i].max_val) {
+            if (pos < ARM_JOINT_LIMITS.J[i].min_val - lim || pos > ARM_JOINT_LIMITS.J[i].max_val + lim) {
                 joints_[i]->disable();
                 return;
             }
         }
         if (arm_state_ == ArmState::Relax) {
+            q_ref_ = g_ref_ = matrixf::zeros<6, 1>();
             disable();
             return;
         }
+        g_ref_ = arm_cmd.g_tor_ref;
 
+        // 暂未加入重力补偿
         if (arm_state_ == ArmState::Waiting) {
             q_ref_ = parm_.waiting_deg;
             clamp_state_ = ClampState::Open;
@@ -63,11 +81,10 @@ namespace arm {
 
         applyJointLimits(q_ref_);
 
-        // 暂未加入重力补偿
         for (uint8_t j = 0; j < 6; j++) {
             if (joints_[j])
                 joints_[j]->control(q_ref_[j][0], parm_.J_parm[j].speed_max,
-                    parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, 0);
+                    parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, g_ref_[j][0]);
         }
 
         if (joints_[ARM_JOINT_END]) {

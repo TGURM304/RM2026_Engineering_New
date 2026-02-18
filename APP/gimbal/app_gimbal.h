@@ -9,7 +9,8 @@
 typedef struct {
     bool angle_upd;
     float end_angle;
-    float tar_q[6];
+    float tar_xyz[3];
+    float tar_rpy[3];
     float q_data[6];
     float q_d[6];
     float q_dd[6];

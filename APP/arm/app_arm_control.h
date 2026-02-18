@@ -44,8 +44,10 @@ namespace arm {
         float clamp_pos{0.f};
         ArmState arm_state{ArmState::Relax};
         ClampState clamp_state{ClampState::Open};
-    };    // 目标状态
+    };
+    // 目标状态
     struct ctrl_out_data_t {
+        Matrixf<6, 1> g_tor_ref;
         Matrixf<6, 1> pos_ref;
         ClampState clamp_state{ClampState::Open};
     };
@@ -82,7 +84,7 @@ namespace arm {
         void setState(ArmState s) { arm_state_ = s; }
         ArmState getState() const { return arm_state_; }
 
-        arm_data_t *app_arm_data() {
+        arm_data_t *app_arm_ctr_data() {
             return &data_;
         }
 
@@ -96,6 +98,7 @@ namespace arm {
 
         Motor::DMMotor* joints_[7]{};
         Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
+        Matrixf<6, 1> g_ref_ = matrixf::zeros<6, 1>();
 
         bool valid_{false};
         arm_parm parm_;
