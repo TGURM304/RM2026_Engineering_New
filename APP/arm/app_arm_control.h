@@ -14,12 +14,16 @@
 #include <memory>
 #include <cstdint>
 
+#include "ctrl_pid.h"
+
 #ifdef __cplusplus
 
 namespace arm {
     //统一使用弧度制
 
     struct pid_struct{
+        bool use_mit_pd;
+        Controller::PID joint_pos_pid, joint_speed_pid;
         float Kp, Kd;
         float speed_max, tor_max, tor_min;
     };
@@ -41,6 +45,7 @@ namespace arm {
     // 当前状态
     struct arm_data_t {
         Matrixf<6, 1> pos;
+        Matrixf<6, 1> vel;
         float clamp_pos{0.f};
         ArmState arm_state{ArmState::Relax};
         ClampState clamp_state{ClampState::Open};
@@ -91,8 +96,8 @@ namespace arm {
     private:
         void applyJointLimits(Matrixf<6, 1>& q) const {
             for (uint8_t i = 0; i < 6; i++) {
-                if (q[i][0] > ARM_JOINT_LIMITS.J[i].max_val) q[i][0] = ARM_JOINT_LIMITS.J[i].max_val;
-                if (q[i][0] < ARM_JOINT_LIMITS.J[i].min_val) q[i][0] = ARM_JOINT_LIMITS.J[i].min_val;
+                if (q[i][0] > ARM_JOINT_RAW_LIMITS.J[i].max_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].max_val;
+                if (q[i][0] < ARM_JOINT_RAW_LIMITS.J[i].min_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].min_val;
             }
         }
 

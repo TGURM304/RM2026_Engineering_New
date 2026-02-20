@@ -75,7 +75,7 @@ static void arm_links_init() {
     pc5[0][0] = -0.0013f; pc5[1][0] = -0.0017f; pc5[2][0] = -0.0025f;
     pc6[0][0] = 0.00001f; pc6[1][0] = 0.00018f; pc6[2][0] = 0.0456f;
 
-    float m1 = 1.143f, m2 = 0.777f + 0.3f, m3 = 1.82f + 0.2f, m4 = 0.596f + 0.3f, m5 = 0.471f + 0.1f, m6 = 0.376f + 0.17f;
+    float m1 = 1.143f, m2 = 0.777f + 0.3f, m3 = 1.82f + 0.2f, m4 = 0.596f + 0.3f, m5 = 0.471f + 0.1f, m6 = 0.376f + 0.2f;
 
     g_arm_links[0] = arm::Link(0.0f,   0.0f,    0.0f,   0.0f, arm::Revolute, 0.0f,   -240.0f*c_, 245.0f*c_, m1, pc1, I1);
     g_arm_links[1] = arm::Link(0.0f,   M_PI_2,  arm_d2, 0.0f, arm::Revolute, 0.0f,     67.0f*c_, 135.0f*c_, m2, pc2, I2);

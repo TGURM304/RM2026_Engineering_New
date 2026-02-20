@@ -80,7 +80,7 @@ DMMotor DM_Joint_End("Joint_end",DMMotor::J4310,{
 });
 
 static const float start_deg_q[6] = {
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+    0.0f, -45.0f, -47.0f, 0.0f, 0.0f, 0.0f
 };
 static const float waiting_deg_q[6] = {
     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
@@ -88,13 +88,34 @@ static const float waiting_deg_q[6] = {
 
 static arm::arm_parm g_arm_parm = {
     .J_parm = {
-            { .Kp = 20.0f, .Kd = 3.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
-            { .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 200.0f, .tor_min = -200.0f },
-            { .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
-            { .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 28.0f, .tor_min = -28.0f },
-            { .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
-            { .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
-            { .Kp =  5.0f, .Kd = 2.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp = 20.0f, .Kd = 3.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+            { .use_mit_pd = false,
+                    .joint_pos_pid = {9, 0, 0, 1, 0},
+                    .joint_speed_pid = {8, 2.5f/1000.f, 0.5f, 16, 6},
+                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 200.0f, .tor_min = -200.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 28.0f, .tor_min = -28.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+            { .use_mit_pd = true,
+                    .joint_pos_pid = {0, 0, 0, 0, 0},
+                    .joint_speed_pid = {0, 0, 0, 0, 0},
+                    .Kp =  5.0f, .Kd = 2.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
     },
     .start_deg = Matrixf<6, 1>(const_cast<float*>(start_deg_q)),
     .waiting_deg = Matrixf<6, 1>(const_cast<float*>(waiting_deg_q))
@@ -175,7 +196,7 @@ void app_gimbal_task(void *args) {
 
     chassis.init();
 
-    float j0_q = 0;
+    float j0_q = 0, j1_q = 0;
 
     while(true) {
 
@@ -183,12 +204,15 @@ void app_gimbal_task(void *args) {
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
             j0_q += rc->rc_r[0] * 0.000005f;
-            j0_q = math::limit(j0_q, arm::ARM_JOINT_LIMITS.J[0].min_val, arm::ARM_JOINT_LIMITS.J[0].max_val);
+            j1_q += rc->rc_r[1] * 0.000001f;
+            j0_q = math::limit(j0_q, arm::ARM_JOINT_RAW_LIMITS.J[0].min_val, arm::ARM_JOINT_RAW_LIMITS.J[0].max_val);
+            j1_q = math::limit(j1_q, -45 * M_PI / 180, 23 * M_PI / 180);
             chassis_rotate = 3.0f * rc->reserved;
             chassis_save_state[0] = rc->s_l;
             chassis_save_state[1] = rc->s_r;
         } else {
-            j0_q = chassis_vx = chassis_vy = chassis_rotate = 0;
+            j0_q = j1_q = 0;
+            chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
             gimbal_arm.angle_upd = false;
         }
@@ -198,15 +222,8 @@ void app_gimbal_task(void *args) {
         arm_out.g_tor_ref[1][0] *= -1.1, arm_out.g_tor_ref[4][0] *= 1.1;
         arm_out.pos_ref = matrixf::zeros<6, 1>();
         arm_out.pos_ref[0][0] = j0_q;
+        arm_out.pos_ref[1][0] = j1_q;
         g_arm_controller.update(arm_out);
-
-        // DM_Joint0.control(j0_q, 0, 20, 3, arm_clc->upd_tar[0][0]);
-        // DM_Joint1.control(0, 0, 0, 0, -arm_clc->upd_tar[1][0]*1.1);
-        // DM_Joint2.control(0, 0, 0, 0, arm_clc->upd_tar[2][0]*1.0);
-        // DM_Joint3.control(0, 0, 0, 0, arm_clc->upd_tar[3][0]*1.0);
-        // DM_Joint4.control(0, 0, 0, 0, arm_clc->upd_tar[4][0]*1.1);
-        // DM_Joint5.control(0, 0, 0, 0, arm_clc->upd_tar[5][0]*1.0);
-        // DM_Joint_End.control(0, 0, 0, 0, 0);
 
         app_msg_vofa_send(E_UART_DEBUG,
             gimbal_arm.q_data[0] * 180/M_PI,
@@ -217,7 +234,9 @@ void app_gimbal_task(void *args) {
             gimbal_arm.q_data[5] * 180/M_PI,
             arm_data->pos[0][0] * 180/M_PI,
             arm_data->pos[1][0] * 180/M_PI,
-            arm_data->pos[2][0] * 180/M_PI
+            arm_data->pos[2][0] * 180/M_PI,
+            j1_q,
+            DM_Joint1.status.torque
             // chassis_save_state[1]
             // arm_clc->upd_tar[0][0],
             // arm_clc->upd_tar[1][0],

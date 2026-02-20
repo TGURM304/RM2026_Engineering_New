@@ -43,9 +43,12 @@ namespace arm {
     void ArmController::update(const ctrl_out_data_t& arm_cmd) {
         if (!valid_) return;
 
-        // 从电机读反馈，更新当前状态（与 param 单位一致，一般为弧度）
+        // 从电机读反馈，更新当前状态（与 param 单位一致，为弧度）
         for (uint8_t j = 0; j < 6; j++) {
-            if (joints_[j]) data_.pos[j][0] = joints_[j]->status.pos;
+            if (joints_[j]) {
+                data_.pos[j][0] = joints_[j]->status.pos;
+                data_.vel[j][0] = joints_[j]->status.vel;
+            }
         }
         if (joints_[6]) data_.clamp_pos = joints_[6]->status.pos;
         data_.arm_state = arm_state_;
@@ -58,7 +61,7 @@ namespace arm {
         for (uint8_t i = 0; i < 6; i++) {
             if (!joints_[i]) continue;
             float pos = joints_[i]->status.pos;
-            if (pos < ARM_JOINT_LIMITS.J[i].min_val - lim || pos > ARM_JOINT_LIMITS.J[i].max_val + lim) {
+            if (pos < ARM_JOINT_RAW_LIMITS.J[i].min_val - lim || pos > ARM_JOINT_RAW_LIMITS.J[i].max_val + lim) {
                 joints_[i]->disable();
                 return;
             }
@@ -82,17 +85,26 @@ namespace arm {
         applyJointLimits(q_ref_);
 
         for (uint8_t j = 0; j < 6; j++) {
-            if (joints_[j])
+            if (!joints_[j]) continue;
+            if(parm_.J_parm[j].use_mit_pd) {
                 joints_[j]->control(q_ref_[j][0], parm_.J_parm[j].speed_max,
                     parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, g_ref_[j][0]);
+            }else {
+                float vel_ref = parm_.J_parm[j].joint_pos_pid.update(data_.pos[j][0], q_ref_[j][0]);
+                float tor_ref = parm_.J_parm[j].joint_speed_pid.update(data_.vel[j][0], vel_ref);
+                tor_ref += g_ref_[j][0];
+                tor_ref = math::limit(tor_ref, parm_.J_parm[j].tor_min, parm_.J_parm[j].tor_max);
+                joints_[j]->control(0, parm_.J_parm[j].speed_max,
+                    parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, tor_ref);
+            }
         }
 
         if (joints_[ARM_JOINT_END]) {
             float clamp_pos = 0.0f;
             switch (arm_cmd.clamp_state) {
-                case ClampState::Open:    clamp_pos = ARM_JOINT_LIMITS.J_end.max_val; break;
-                case ClampState::Close:   clamp_pos = ARM_JOINT_LIMITS.J_end.min_val; break;
-                case ClampState::SetZero: clamp_pos = ARM_JOINT_LIMITS.J_end.max_val/2; break;
+                case ClampState::Open:    clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.max_val; break;
+                case ClampState::Close:   clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.min_val; break;
+                case ClampState::SetZero: clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.max_val/2; break;
             }
             joints_[ARM_JOINT_END]->control(clamp_pos, parm_.J_parm[ARM_JOINT_END].speed_max,
                 parm_.J_parm[ARM_JOINT_END].Kp, parm_.J_parm[ARM_JOINT_END].Kd, 0);
