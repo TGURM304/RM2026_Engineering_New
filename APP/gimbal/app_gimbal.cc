@@ -149,7 +149,9 @@ static void get_DM_angle() {
     if(arm_data->arm_state == arm::ArmState::Relax) {
         gimbal_arm.angle_upd = false;
         memset(gimbal_arm.q_data, 0, sizeof(gimbal_arm.q_data));
-    }else if(arm_data->arm_state == arm::ArmState::Working || arm_data->arm_state == arm::ArmState::Waiting) {
+        gimbal_arm.end_angle = 0;
+    }else if(arm_data->arm_state == arm::ArmState::Working || arm_data->arm_state == arm::ArmState::Waiting ||
+            arm_data->arm_state == arm::ArmState::Float) {
         gimbal_arm.q_data[0] = DM_Joint0.status.pos;
         gimbal_arm.q_data[1] = -(DM_Joint1.status.pos - 90.0f * M_PI / 180);
         gimbal_arm.q_data[2] = DM_Joint2.status.pos - 90.0f * M_PI / 180;
@@ -202,6 +204,7 @@ void app_gimbal_task(void *args) {
     while(true) {
 
         if (bsp_time_get_ms() - rc->timestamp < 100) {
+            g_arm_controller.setState(arm::ArmState::Float);
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
             j3_q += rc->rc_r[0] * 0.000001f;
@@ -212,6 +215,7 @@ void app_gimbal_task(void *args) {
             chassis_save_state[0] = rc->s_l;
             chassis_save_state[1] = rc->s_r;
         } else {
+            g_arm_controller.setState(arm::ArmState::Waiting);
             j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
             chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
@@ -221,7 +225,6 @@ void app_gimbal_task(void *args) {
         get_DM_angle();
         arm_out.g_tor_ref = arm_clc->upd_tar;
         arm_out.g_tor_ref[1][0] *= -1.1, arm_out.g_tor_ref[4][0] *= 1.1;
-        // arm_out.g_tor_ref[3][0] += 1.6*tanhf(2.7*arm_data->vel[3][0]);
         arm_out.pos_ref = matrixf::zeros<6, 1>();
         arm_out.pos_ref[0][0] = j0_q;
         arm_out.pos_ref[1][0] = j1_q;
@@ -235,13 +238,14 @@ void app_gimbal_task(void *args) {
             arm_data->pos[0][0] * 180/M_PI,
             arm_data->pos[1][0] * 180/M_PI,
             arm_data->pos[2][0] * 180/M_PI,
-            // gimbal_arm.q_data[0] * 180/M_PI,
-            // gimbal_arm.q_data[1] * 180/M_PI,
-            // gimbal_arm.q_data[2] * 180/M_PI,
+            gimbal_arm.q_data[0] * 180/M_PI,
+            gimbal_arm.q_data[1] * 180/M_PI,
+            gimbal_arm.q_data[2] * 180/M_PI,
             gimbal_arm.q_data[3] * 180/M_PI,
             gimbal_arm.q_data[4] * 180/M_PI,
             gimbal_arm.q_data[5] * 180/M_PI,
-            DM_Joint3.status.torque
+            g_arm_controller.getState(),
+            DM_Joint1.status.torque
             // chassis_save_state[1]
         );
 

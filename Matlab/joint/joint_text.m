@@ -5,13 +5,13 @@ clear;
 q_input = [50.2,40.5,112.17,40.12,56.21,70.7];
 %% 公式推导正解
 % 连杆参数(没有的默认为零）
-a2 = 350;
-a3 = -90; % 未知
-d2 = 22.7; % 未知
-d4 = 225.71;
+a2 = 0.350;
+a3 = -0.090; % 未知
+d2 = 0.0227; % 未知
+d4 = 0.22571;
 
-Base = transl(116, 0, 91+215);   % 基座偏移 100 mm
-Tool = transl(0, 0, 150);   % 末端工具偏移 200 mm
+Base = transl(0.116, 0, 0.091+0.215);   % 基座偏移 100 mm
+Tool = transl(0, 0, 0.150);   % 末端工具偏移 200 mm
 
 T__ = my_fkine(q_input, Base, Tool, a2, a3, d2, d4);
 %T__ = transl(-228,-110,110) * trotx(90) * troty(180);
@@ -72,8 +72,8 @@ for i = 1:size(AllSloverTheta,1)
     disp(T__ - T_calc);
 end
 
-target_point1 = [-228, -110, 110];
-target_point2 = [-228,  110, 110];
+target_point1 = [-0.228, -0.110, 0.110];
+target_point2 = [-0.228,  0.110, 0.110];
 
 for i = 1:size(AllSloverTheta,1)
     figure(i);

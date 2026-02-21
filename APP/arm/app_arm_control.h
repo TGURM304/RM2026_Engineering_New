@@ -36,7 +36,7 @@ namespace arm {
     };
 
     enum class ArmState {
-        Relax, Working, Waiting
+        Relax, Working, Waiting, Float
     };
 
     enum class ClampState {
@@ -114,6 +114,7 @@ namespace arm {
         arm_parm parm_;
         arm_data_t data_;   // 当前状态
         ArmState arm_state_{ArmState::Relax};
+        ArmState last_arm_state_{ArmState::Relax};
         ClampState clamp_state_{ClampState::Open};
     };
 }

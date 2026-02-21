@@ -65,7 +65,13 @@ namespace arm {
                 joints_[i]->disable();
                 return;
             }
+            if (last_arm_state_ != arm_state_) {
+                parm_.J_parm[i].joint_pos_pid.clear();
+                parm_.J_parm[i].joint_speed_pid.clear();
+            }
         }
+        last_arm_state_ = arm_state_;
+
         if (arm_state_ == ArmState::Relax) {
             q_ref_ = g_ref_ = matrixf::zeros<6, 1>();
             disable();
@@ -89,6 +95,10 @@ namespace arm {
                 float fri_tor = parm_.J_parm[j].joint_fri * tanhf(parm_.J_parm[j].k_f * data_.vel[j][0]);
                 g_ref_[j][0] += fri_tor;
             }
+            if(arm_state_ == ArmState::Float) {
+                joints_[j]->control(0, 0, 0, 0, g_ref_[j][0]);
+                continue;
+            }
             if(parm_.J_parm[j].use_mit_pd) {
                 joints_[j]->control(q_ref_[j][0], parm_.J_parm[j].speed_max,
                     parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, g_ref_[j][0]);
@@ -97,8 +107,7 @@ namespace arm {
                 float tor_ref = parm_.J_parm[j].joint_speed_pid.update(data_.vel[j][0], vel_ref);
                 tor_ref += g_ref_[j][0];
                 tor_ref = math::limit(tor_ref, parm_.J_parm[j].tor_min, parm_.J_parm[j].tor_max);
-                joints_[j]->control(0, parm_.J_parm[j].speed_max,
-                    parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, tor_ref);
+                joints_[j]->control(0, 0, 0, 0, tor_ref);
             }
         }
 
