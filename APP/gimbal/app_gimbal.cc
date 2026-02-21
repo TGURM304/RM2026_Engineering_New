@@ -93,25 +93,25 @@ static arm::arm_parm g_arm_parm = {
                     .joint_speed_pid = {0, 0, 0, 0, 0},
                     .Kp = 20.0f, .Kd = 3.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = false,
-                    .joint_pos_pid = {9, 0, 0, 1, 0},
-                    .joint_speed_pid = {8, 2.5f/1000.f, 0.5f, 16, 6},
+                    .joint_pos_pid = {15, 0, 0, 1, 0},
+                    .joint_speed_pid = {15, 4.5f/1000.f, 0.5f, 26, 10},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 200.0f, .tor_min = -200.0f },
-            { .use_mit_pd = true,
-                    .joint_pos_pid = {0, 0, 0, 0, 0},
-                    .joint_speed_pid = {0, 0, 0, 0, 0},
+            { .use_mit_pd = false,
+                    .joint_pos_pid = {13, 0.1f, 0, 1, 0},
+                    .joint_speed_pid = {12, 5.0f/1000.f, 0, 16, 6},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
-            { .use_mit_pd = true,
-                    .joint_pos_pid = {0, 0, 0, 0, 0},
-                    .joint_speed_pid = {0, 0, 0, 0, 0},
+            { .use_mit_pd = false,
+                    .joint_pos_pid = {11, 0, 0, 1.5, 0},
+                    .joint_speed_pid = {10, 3.5f/1000.f, 0.5f, 10, 5},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 28.0f, .tor_min = -28.0f },
             { .use_mit_pd = true,
-                    .joint_pos_pid = {0, 0, 0, 0, 0},
-                    .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .joint_pos_pid = {1, 0, 0, 1, 0},
+                    .joint_speed_pid = {2, 0.02f/1000.f, 0.02f, 5, 3},
+                    .Kp =  10.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .Kp =  7.0f, .Kd = 2.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
@@ -196,22 +196,23 @@ void app_gimbal_task(void *args) {
 
     chassis.init();
 
-    float j0_q = 0, j1_q = 0;
+    float j0_q = 0, j1_q = 0, j2_q = 0, j3_q = 0, j4_q = 0, j5_q = 0;
+    Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
 
     while(true) {
 
         if (bsp_time_get_ms() - rc->timestamp < 100) {
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
-            j0_q += rc->rc_r[0] * 0.000005f;
+            j3_q += rc->rc_r[0] * 0.000001f;
             j1_q += rc->rc_r[1] * 0.000001f;
-            j0_q = math::limit(j0_q, arm::ARM_JOINT_RAW_LIMITS.J[0].min_val, arm::ARM_JOINT_RAW_LIMITS.J[0].max_val);
+            j3_q = math::limit(j3_q, arm::ARM_JOINT_RAW_LIMITS.J[3].min_val, arm::ARM_JOINT_RAW_LIMITS.J[3].max_val);
             j1_q = math::limit(j1_q, -45 * M_PI / 180, 23 * M_PI / 180);
             chassis_rotate = 3.0f * rc->reserved;
             chassis_save_state[0] = rc->s_l;
             chassis_save_state[1] = rc->s_r;
         } else {
-            j0_q = j1_q = 0;
+            j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
             chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
             gimbal_arm.angle_upd = false;
@@ -220,30 +221,28 @@ void app_gimbal_task(void *args) {
         get_DM_angle();
         arm_out.g_tor_ref = arm_clc->upd_tar;
         arm_out.g_tor_ref[1][0] *= -1.1, arm_out.g_tor_ref[4][0] *= 1.1;
+        // arm_out.g_tor_ref[3][0] += 1.6*tanhf(2.7*arm_data->vel[3][0]);
         arm_out.pos_ref = matrixf::zeros<6, 1>();
         arm_out.pos_ref[0][0] = j0_q;
         arm_out.pos_ref[1][0] = j1_q;
+        arm_out.pos_ref[2][0] = j2_q;
+        arm_out.pos_ref[3][0] = j3_q;
+        arm_out.pos_ref[4][0] = j4_q;
+        arm_out.pos_ref[5][0] = j5_q;
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            gimbal_arm.q_data[0] * 180/M_PI,
-            gimbal_arm.q_data[1] * 180/M_PI,
-            gimbal_arm.q_data[2] * 180/M_PI,
-            gimbal_arm.q_data[3] * 180/M_PI,
-            gimbal_arm.q_data[4] * 180/M_PI,
-            gimbal_arm.q_data[5] * 180/M_PI,
             arm_data->pos[0][0] * 180/M_PI,
             arm_data->pos[1][0] * 180/M_PI,
             arm_data->pos[2][0] * 180/M_PI,
-            j1_q,
-            DM_Joint1.status.torque
+            // gimbal_arm.q_data[0] * 180/M_PI,
+            // gimbal_arm.q_data[1] * 180/M_PI,
+            // gimbal_arm.q_data[2] * 180/M_PI,
+            gimbal_arm.q_data[3] * 180/M_PI,
+            gimbal_arm.q_data[4] * 180/M_PI,
+            gimbal_arm.q_data[5] * 180/M_PI,
+            DM_Joint3.status.torque
             // chassis_save_state[1]
-            // arm_clc->upd_tar[0][0],
-            // arm_clc->upd_tar[1][0],
-            // arm_clc->upd_tar[2][0],
-            // arm_clc->upd_tar[3][0],
-            // arm_clc->upd_tar[4][0],
-            // arm_clc->upd_tar[5][0]
         );
 
         OS::Task::SleepMilliseconds(1);
@@ -253,6 +252,7 @@ void app_gimbal_task(void *args) {
 
 void app_gimbal_init() {
     g_arm_controller.init();
+    g_arm_controller.setUseFri(arm::ARM_JOINT_3, 1.6, 2.7);
 }
 
 #endif

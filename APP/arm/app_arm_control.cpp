@@ -73,7 +73,6 @@ namespace arm {
         }
         g_ref_ = arm_cmd.g_tor_ref;
 
-        // 暂未加入重力补偿
         if (arm_state_ == ArmState::Waiting) {
             q_ref_ = parm_.waiting_deg;
             clamp_state_ = ClampState::Open;
@@ -86,6 +85,10 @@ namespace arm {
 
         for (uint8_t j = 0; j < 6; j++) {
             if (!joints_[j]) continue;
+            if(use_joint_fri[j]) {
+                float fri_tor = parm_.J_parm[j].joint_fri * tanhf(parm_.J_parm[j].k_f * data_.vel[j][0]);
+                g_ref_[j][0] += fri_tor;
+            }
             if(parm_.J_parm[j].use_mit_pd) {
                 joints_[j]->control(q_ref_[j][0], parm_.J_parm[j].speed_max,
                     parm_.J_parm[j].Kp, parm_.J_parm[j].Kd, g_ref_[j][0]);

@@ -26,6 +26,7 @@ namespace arm {
         Controller::PID joint_pos_pid, joint_speed_pid;
         float Kp, Kd;
         float speed_max, tor_max, tor_min;
+        float joint_fri, k_f;
     };
 
     struct arm_parm{
@@ -81,10 +82,13 @@ namespace arm {
         void enable();
         void update(const ctrl_out_data_t& arm_cmd);
 
-        // /** 获取本次周期下发的控制量（调试/观测） */
-        // void getCtrlOut(ctrl_out_data_6j_t& out) const { out = ctrl_out_; }
-        // /** 当前采用的关节目标（逆解结果或 q_ref） */
-        // const Matrixf<6, 1>& getCurrentQRef() const { return q_ref_; }
+        const Matrixf<6, 1>& getCurrentQRef() const { return q_ref_; }
+
+        void setUseFri(ArmJointModel l, float fri, float k_f) {
+            use_joint_fri[l] = true;
+            parm_.J_parm[l].joint_fri = fri;
+            parm_.J_parm[l].k_f = k_f;
+        }
 
         void setState(ArmState s) { arm_state_ = s; }
         ArmState getState() const { return arm_state_; }
@@ -106,6 +110,7 @@ namespace arm {
         Matrixf<6, 1> g_ref_ = matrixf::zeros<6, 1>();
 
         bool valid_{false};
+        bool use_joint_fri[ARM_JOINT_COUNT]{};            // 是否使用关节摩擦力补偿
         arm_parm parm_;
         arm_data_t data_;   // 当前状态
         ArmState arm_state_{ArmState::Relax};
