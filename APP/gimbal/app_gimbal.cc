@@ -15,6 +15,7 @@
 #include "app_motor.h"
 #include "app_msg_def.h"
 #include "app_sys.h"
+#include "alg_filter.h"
 #include "dev_motor_dji.h"
 #include "sys_task.h"
 
@@ -79,6 +80,17 @@ DMMotor DM_Joint_End("Joint_end",DMMotor::J4310,{
     .p_max = 12.5, .v_max = 30, .t_max = 10, .kp_max = 500, .kd_max = 5
 });
 
+static Algorithm::LowPassFilter pos_lpf[3] = {
+    Algorithm::LowPassFilter(3.0),
+    Algorithm::LowPassFilter(3.0),
+    Algorithm::LowPassFilter(3.0)
+};
+static Algorithm::LowPassFilter rpy_lpf[3] = {
+    Algorithm::LowPassFilter(3.0),
+    Algorithm::LowPassFilter(3.0),
+    Algorithm::LowPassFilter(3.0)
+};
+
 static const float start_deg_q[6] = {
     0.0f, -45.0f, -47.0f, 0.0f, 0.0f, 0.0f
 };
@@ -101,7 +113,7 @@ static arm::arm_parm g_arm_parm = {
                     .joint_speed_pid = {12, 5.0f/1000.f, 0, 16, 6},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
             { .use_mit_pd = false,
-                    .joint_pos_pid = {11, 0, 0, 1.5, 0},
+                    .joint_pos_pid = {11, 0, 0, 2, 0},
                     .joint_speed_pid = {10, 3.5f/1000.f, 0.5f, 10, 5},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 28.0f, .tor_min = -28.0f },
             { .use_mit_pd = true,
@@ -111,7 +123,7 @@ static arm::arm_parm g_arm_parm = {
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp =  7.0f, .Kd = 2.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .Kp =  7.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
@@ -130,6 +142,7 @@ arm::ArmController g_arm_controller(
 const auto ins = app_ins_data();
 const auto rc = bsp_rc_data();
 const auto arm_data = g_arm_controller.app_arm_ctr_data();
+const auto referee = app_referee_data();
 arm::ctrl_out_data_t arm_out;
 gimbal_arm_t gimbal_arm = {
     .angle_upd = false,
@@ -145,20 +158,25 @@ const gimbal_arm_t *gimbal_arm_data() {
     return &gimbal_arm;
 }
 
-static void get_DM_angle() {
+static void get_DM_angle(float pos[3], float rpy[3]) {
     if(arm_data->arm_state == arm::ArmState::Relax) {
         gimbal_arm.angle_upd = false;
+        memcpy(gimbal_arm.tar_rpy, 0, sizeof(gimbal_arm.tar_rpy));
+        memcpy(gimbal_arm.tar_xyz, 0, sizeof(gimbal_arm.tar_xyz));
         memset(gimbal_arm.q_data, 0, sizeof(gimbal_arm.q_data));
         gimbal_arm.end_angle = 0;
     }else if(arm_data->arm_state == arm::ArmState::Working || arm_data->arm_state == arm::ArmState::Waiting ||
             arm_data->arm_state == arm::ArmState::Float) {
-        gimbal_arm.tar_rpy[0] = -104.1f * M_PI / 180.0f;
-        gimbal_arm.tar_rpy[1] =   17.9f * M_PI / 180.0f;
-        gimbal_arm.tar_rpy[2] = -100.8f * M_PI / 180.0f;
+        memcpy(gimbal_arm.tar_rpy, rpy, sizeof(gimbal_arm.tar_rpy));
+        memcpy(gimbal_arm.tar_xyz, pos, sizeof(gimbal_arm.tar_xyz));
 
-        gimbal_arm.tar_xyz[0] = 0.264f;
-        gimbal_arm.tar_xyz[1] = 0.204f;
-        gimbal_arm.tar_xyz[2] = 0.554f;
+        // gimbal_arm.tar_rpy[0] = -104.1f * M_PI / 180.0f;
+        // gimbal_arm.tar_rpy[1] =   17.9f * M_PI / 180.0f;
+        // gimbal_arm.tar_rpy[2] = -100.8f * M_PI / 180.0f;
+        //
+        // gimbal_arm.tar_xyz[0] = 0.264f;
+        // gimbal_arm.tar_xyz[1] = 0.204f;
+        // gimbal_arm.tar_xyz[2] = 0.554f;
 
         gimbal_arm.q_data[0] = DM_Joint0.status.pos;
         gimbal_arm.q_data[1] = -(DM_Joint1.status.pos - 90.0f * M_PI / 180);
@@ -215,17 +233,20 @@ void app_gimbal_task(void *args) {
 
     chassis.init();
 
+    bool use_delta = false;
+    static bool lpf_inited = false;
     // float j0_q = 0, j1_q = 0, j2_q = 0, j3_q = 0, j4_q = 0, j5_q = 0;
+    float pos[3], rpy[3];
+    float lst_pos[3] = {}, lst_rpy[3] = {};
     Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
 
     while(true) {
-
         if (bsp_time_get_ms() - rc->timestamp < 100) {
             g_arm_controller.setState(arm::ArmState::Working);
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
             chassis_rotate = 3.0f * rc->reserved;
-            chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
+            // chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
             // j3_q += rc->rc_r[0] * 0.000001f;
             // j1_q += rc->rc_r[1] * 0.000001f;
             // j3_q = math::limit(j3_q, arm::ARM_JOINT_RAW_LIMITS.J[3].min_val, arm::ARM_JOINT_RAW_LIMITS.J[3].max_val);
@@ -233,6 +254,8 @@ void app_gimbal_task(void *args) {
             if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
             else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
             else arm_out.clamp_state = arm::ClampState::SetZero;
+            if(rc->s_l == 1) use_delta = true;
+            else use_delta = false;
         } else {
             g_arm_controller.setState(arm::ArmState::Float);
             // j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
@@ -240,27 +263,74 @@ void app_gimbal_task(void *args) {
             chassis_save_state[0] = chassis_save_state[1] = false;
             arm_out.clamp_state = arm::ClampState::Close;
             gimbal_arm.angle_upd = false;
+            use_delta = false;
         }
 
-        get_DM_angle();
+        if(bsp_time_get_ms() - referee->timestamp < 200) {
+            if(bsp_time_get_ms() - referee->custom_controller_timestamp < 200) {
+                float pos_raw[3], rpy_raw[3];
+                pos_raw[0] = -referee->custom_controller.pos_data[0]*1.5f + 0.320f;
+                pos_raw[1] = referee->custom_controller.pos_data[1]*1.5f;
+                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*1.5f + 0.450f;
+                rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
+                rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
+                rpy_raw[2] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
+
+                if (!lpf_inited) {
+                    for (int i = 0; i < 3; ++i) {
+                        pos_lpf[i].reset(pos_raw[i]);
+                        rpy_lpf[i].reset(rpy_raw[i]);
+                    }
+                    lpf_inited = true;
+                }
+                for (int i = 0; i < 3; ++i) {
+                    pos[i] = static_cast<float>(pos_lpf[i].update(pos_raw[i], 0.001));
+                    rpy[i] = static_cast<float>(rpy_lpf[i].update(rpy_raw[i], 0.001));
+                }
+                memcpy(lst_pos, pos, sizeof(lst_pos));
+                memcpy(lst_rpy, rpy, sizeof(lst_rpy));
+            }
+        }else {
+            memcpy(pos, lst_pos, sizeof(pos));
+            memcpy(rpy, lst_rpy, sizeof(rpy));
+        }
+
+        get_DM_angle(pos, rpy);
         tmp_pos = get_clc_angle(arm_clc);
         arm_out.g_tor_ref = arm_clc->upd_tar;
         arm_out.g_tor_ref[1][0] *= -1.1, arm_out.g_tor_ref[4][0] *= 1.1;
-        arm_out.pos_ref = tmp_pos;
+        if(use_delta) {
+            arm_out.pos_ref = tmp_pos;
+        }else arm_out.pos_ref = matrixf::zeros<6, 1>();
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            // arm_data->pos[0][0] * 180/M_PI,
-            // arm_data->pos[1][0] * 180/M_PI,
-            // arm_data->pos[2][0] * 180/M_PI,
-            gimbal_arm.q_data[0] * 180/M_PI,
-            gimbal_arm.q_data[1] * 180/M_PI,
-            gimbal_arm.q_data[2] * 180/M_PI,
+            arm_data->pos[0][0] * 180/M_PI,
+            arm_data->pos[1][0] * 180/M_PI,
+            arm_data->pos[2][0] * 180/M_PI,
+            // gimbal_arm.q_data[0] * 180/M_PI,
+            // gimbal_arm.q_data[1] * 180/M_PI,
+            // gimbal_arm.q_data[2] * 180/M_PI,
             gimbal_arm.q_data[3] * 180/M_PI,
             gimbal_arm.q_data[4] * 180/M_PI,
             gimbal_arm.q_data[5] * 180/M_PI,
+            // arm_clc->T_arm_end[0][3],
+            // arm_clc->T_arm_end[1][3],
+            // arm_clc->T_arm_end[2][3],
+            // pos[0],
+            // pos[1],
+            // pos[2],
+            // rpy[0],
+            // rpy[1],
+            // rpy[2],
+            tmp_pos[0][0] * 180/M_PI,
+            tmp_pos[1][0] * 180/M_PI,
+            tmp_pos[2][0] * 180/M_PI,
+            tmp_pos[3][0] * 180/M_PI,
+            tmp_pos[4][0] * 180/M_PI,
+            tmp_pos[5][0] * 180/M_PI
             // g_arm_controller.getState(),
-            DM_Joint_End.status.pos * 180/M_PI
+            // DM_Joint_End.status.pos * 180/M_PI
             // chassis_save_state[1]
         );
 

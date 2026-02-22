@@ -129,27 +129,18 @@ struct app_referee_sentry_info_t {
 
 // 0x0302 - 自定义控制器（图传链路）
 struct app_referee_custom_controller_t {
-    float joint[6];
+    float pos_data[3];
+    float rpy_data[3];
     // uint16_t key;
-    struct {
-        bool key1 : 1;
-        bool key2 : 1;
-        bool key3 : 1;
-        bool key4 : 1;
-        bool key5 : 1;
-        bool key6 : 1;
-        bool key7 : 1;
-        bool key8 : 1;
-        bool key9 : 1;
-        bool key10 : 1;
-        bool key11 : 1;
-        bool key12 : 1;
-        bool key13 : 1;
-        bool key14 : 1;
-        bool key15 : 1;
-        bool key16 : 1;
-    } __attribute__ ((packed)) key;
-    float reserved;
+    // struct {
+    //     bool key1 : 1;
+    //     bool key2 : 1;
+    //     bool key3 : 1;
+    //     bool key4 : 1;
+    //     bool key5 : 1;
+    // } __attribute__((packed)) key;
+    // float reserved;
+    uint8_t fuck[6];
 } __attribute__ ((packed));
 
 // 0x0304 - 客户端控制（图传链路）
