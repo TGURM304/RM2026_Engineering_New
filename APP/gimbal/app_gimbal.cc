@@ -115,7 +115,7 @@ static arm::arm_parm g_arm_parm = {
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp =  5.0f, .Kd = 2.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .Kp =  5.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
     },
     .start_deg = Matrixf<6, 1>(const_cast<float*>(start_deg_q)),
     .waiting_deg = Matrixf<6, 1>(const_cast<float*>(waiting_deg_q))
@@ -152,6 +152,14 @@ static void get_DM_angle() {
         gimbal_arm.end_angle = 0;
     }else if(arm_data->arm_state == arm::ArmState::Working || arm_data->arm_state == arm::ArmState::Waiting ||
             arm_data->arm_state == arm::ArmState::Float) {
+        gimbal_arm.tar_rpy[0] = -104.1f * M_PI / 180.0f;
+        gimbal_arm.tar_rpy[1] =   17.9f * M_PI / 180.0f;
+        gimbal_arm.tar_rpy[2] = -100.8f * M_PI / 180.0f;
+
+        gimbal_arm.tar_xyz[0] = 0.264f;
+        gimbal_arm.tar_xyz[1] = 0.204f;
+        gimbal_arm.tar_xyz[2] = 0.554f;
+
         gimbal_arm.q_data[0] = DM_Joint0.status.pos;
         gimbal_arm.q_data[1] = -(DM_Joint1.status.pos - 90.0f * M_PI / 180);
         gimbal_arm.q_data[2] = DM_Joint2.status.pos - 90.0f * M_PI / 180;
@@ -161,6 +169,15 @@ static void get_DM_angle() {
         gimbal_arm.end_angle = DM_Joint_End.status.pos;
         gimbal_arm.angle_upd = true;
     }
+}
+
+static Matrixf<6, 1> get_clc_angle(const arm::app_Arm_data_t* data_) {
+    if(data_ && data_->angle_upd) {
+        Matrixf<6, 1> tmp_pos = data_->upd_angle;
+        tmp_pos[1][0] = -tmp_pos[1][0] + 90.0f * M_PI / 180;
+        tmp_pos[2][0] = tmp_pos[2][0] + 90.0f * M_PI / 180;
+        return tmp_pos;
+    }else return matrixf::zeros<6, 1>();
 }
 
 float chassis_vx = 0, chassis_vy = 0;
@@ -198,54 +215,52 @@ void app_gimbal_task(void *args) {
 
     chassis.init();
 
-    float j0_q = 0, j1_q = 0, j2_q = 0, j3_q = 0, j4_q = 0, j5_q = 0;
+    // float j0_q = 0, j1_q = 0, j2_q = 0, j3_q = 0, j4_q = 0, j5_q = 0;
     Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
 
     while(true) {
 
         if (bsp_time_get_ms() - rc->timestamp < 100) {
-            g_arm_controller.setState(arm::ArmState::Float);
+            g_arm_controller.setState(arm::ArmState::Working);
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
-            j3_q += rc->rc_r[0] * 0.000001f;
-            j1_q += rc->rc_r[1] * 0.000001f;
-            j3_q = math::limit(j3_q, arm::ARM_JOINT_RAW_LIMITS.J[3].min_val, arm::ARM_JOINT_RAW_LIMITS.J[3].max_val);
-            j1_q = math::limit(j1_q, -45 * M_PI / 180, 23 * M_PI / 180);
             chassis_rotate = 3.0f * rc->reserved;
-            chassis_save_state[0] = rc->s_l;
-            chassis_save_state[1] = rc->s_r;
+            chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
+            // j3_q += rc->rc_r[0] * 0.000001f;
+            // j1_q += rc->rc_r[1] * 0.000001f;
+            // j3_q = math::limit(j3_q, arm::ARM_JOINT_RAW_LIMITS.J[3].min_val, arm::ARM_JOINT_RAW_LIMITS.J[3].max_val);
+            // j1_q = math::limit(j1_q, -45 * M_PI / 180, 23 * M_PI / 180);
+            if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
+            else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
+            else arm_out.clamp_state = arm::ClampState::SetZero;
         } else {
-            g_arm_controller.setState(arm::ArmState::Waiting);
-            j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
+            g_arm_controller.setState(arm::ArmState::Float);
+            // j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
             chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
+            arm_out.clamp_state = arm::ClampState::Close;
             gimbal_arm.angle_upd = false;
         }
 
         get_DM_angle();
+        tmp_pos = get_clc_angle(arm_clc);
         arm_out.g_tor_ref = arm_clc->upd_tar;
         arm_out.g_tor_ref[1][0] *= -1.1, arm_out.g_tor_ref[4][0] *= 1.1;
-        arm_out.pos_ref = matrixf::zeros<6, 1>();
-        arm_out.pos_ref[0][0] = j0_q;
-        arm_out.pos_ref[1][0] = j1_q;
-        arm_out.pos_ref[2][0] = j2_q;
-        arm_out.pos_ref[3][0] = j3_q;
-        arm_out.pos_ref[4][0] = j4_q;
-        arm_out.pos_ref[5][0] = j5_q;
+        arm_out.pos_ref = tmp_pos;
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            arm_data->pos[0][0] * 180/M_PI,
-            arm_data->pos[1][0] * 180/M_PI,
-            arm_data->pos[2][0] * 180/M_PI,
+            // arm_data->pos[0][0] * 180/M_PI,
+            // arm_data->pos[1][0] * 180/M_PI,
+            // arm_data->pos[2][0] * 180/M_PI,
             gimbal_arm.q_data[0] * 180/M_PI,
             gimbal_arm.q_data[1] * 180/M_PI,
             gimbal_arm.q_data[2] * 180/M_PI,
             gimbal_arm.q_data[3] * 180/M_PI,
             gimbal_arm.q_data[4] * 180/M_PI,
             gimbal_arm.q_data[5] * 180/M_PI,
-            g_arm_controller.getState(),
-            DM_Joint1.status.torque
+            // g_arm_controller.getState(),
+            DM_Joint_End.status.pos * 180/M_PI
             // chassis_save_state[1]
         );
 

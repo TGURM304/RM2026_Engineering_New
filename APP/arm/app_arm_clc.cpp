@@ -127,10 +127,9 @@ void app_arm_task(void *args) {
         Matrixf<6, 1> tmp_q(q_data);
         Matrixf<6, 1> tmp_qd(q_d);
         Matrixf<6, 1> tmp_qdd(q_dd);
-        Matrixf<3, 1> t_p(xyz);
-        Matrixf<3, 1> t_rpy(rpy);
-        Matrixf<3, 3> t_R = robotics::rpy2r(rpy);
-        Matrixf<4, 4> tar_T = robotics::rp2t(t_R, t_p);
+        Matrixf<4,4> tar_T =
+            Matrixf<4,4>().translation(xyz[0], xyz[1], xyz[2]) *
+            Matrixf<4,4>().rot_rpy(rpy[0], rpy[1], rpy[2]);
 
         arm_->arm_forward_clc(tmp_q);
         // arm_->arm_jacobi_clc();
@@ -139,13 +138,7 @@ void app_arm_task(void *args) {
         arm_->arm_newton_euler_clc(tmp_q, tmp_qd, tmp_qdd);
 
         // app_msg_vofa_send(E_UART_DEBUG,
-        //     gimbal_data->angle_upd,
-        //     gimbal_data->q_data[0],
-        //     gimbal_data->q_data[1],
-        //     gimbal_data->q_data[2],
-        //     gimbal_data->q_data[3],
-        //     gimbal_data->q_data[4],
-        //     gimbal_data->q_data[5]
+        //     rpy[0], rpy[1], rpy[2]
         //     );
 
         OS::Task::SleepMilliseconds(1);

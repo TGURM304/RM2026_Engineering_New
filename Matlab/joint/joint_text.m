@@ -2,7 +2,7 @@ clc;
 clear;
 
 % 正解输 入关节角
-q_input = [50.2,40.5,112.17,40.12,56.21,70.7];
+q_input = [43.05,109.74,-101.11,57.14,-34.26,-75.06];
 %% 公式推导正解
 % 连杆参数(没有的默认为零）
 a2 = 0.350;
@@ -14,9 +14,13 @@ Base = transl(0.116, 0, 0.091+0.215);   % 基座偏移 100 mm
 Tool = transl(0, 0, 0.150);   % 末端工具偏移 200 mm
 
 T__ = my_fkine(q_input, Base, Tool, a2, a3, d2, d4);
-%T__ = transl(-228,-110,110) * trotx(90) * troty(180);
+T_ = transl(0.264, 0.204, 0.554) * trotx(-100.8) * troty(17.9) * trotz(-104.1);
+%T_ = transl(0.264, 0.204, 0.554) * rpy2tr(-104.1, 17.9, -100.8, 'deg');
 disp("正解结果：")
 disp(T__);
+disp(T_);
+disp(tr2rpy(T__, 'deg'));
+disp(tr2rpy(T_, 'deg'));
 
 %L1 thi1(可)     0          0         0
 %L2 0            d2(可)     0         phi2
@@ -33,12 +37,12 @@ L4 = Link([0            d4      a3        pi/2  ],'modified');
 L5 = Link([0            0       0        -pi/2  ],'modified');
 L6 = Link([0            0       0         pi/2  ],'modified');
 
-L1.qlim =[-150*pi/180, 150*pi/180];
-L2.qlim =[  30*pi/180, 150*pi/180];
-L3.qlim =[-150*pi/180, 150*pi/180];
-L4.qlim =[-180*pi/180, 180*pi/180];
-L5.qlim =[-120*pi/180, 120*pi/180];
-L6.qlim =[-180*pi/180, 180*pi/180];
+L1.qlim =[-240.0 * pi / 180.0, 245.0 * pi / 180.0];
+L2.qlim =[  67.0 * pi / 180.0, 135.0 * pi / 180.0];
+L3.qlim =[-137.0 * pi / 180.0,  13.0 * pi / 180.0];
+L4.qlim =[-175.0 * pi / 180.0, 115.0 * pi / 180.0];
+L5.qlim =[ -80.0 * pi / 180.0,  82.0 * pi / 180.0];
+L6.qlim =[ -pi               ,  pi ];
 
 IRB4600=SerialLink([L1 L2 L3 L4 L5 L6], 'name', 'IRB4600');
 IRB4600.base = Base;
@@ -98,3 +102,20 @@ for i = 1:size(AllSloverTheta,1)
         i, q_deg));
 end
 
+num_solutions = size(AllSloverTheta, 1);
+All_T_matrices = zeros(4, 4, num_solutions);
+
+for i = 1:num_solutions
+    q_deg = rad2deg(AllSloverTheta(i,:));
+    All_T_matrices(:,:,i) = my_fkine(q_deg, Base, Tool, a2, a3, d2, d4);
+    disp(All_T_matrices(:,:,i));
+end
+
+T_lib = IRB4600.fkine(q_input * pi/180);
+disp("库FK结果：")
+disp(T_lib.T);   % .T 取出4x4矩阵
+
+disp("我的FK结果：")
+disp(T__);
+
+disp(T_);

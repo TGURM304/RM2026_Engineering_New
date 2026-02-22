@@ -114,9 +114,9 @@ namespace arm {
         if (joints_[ARM_JOINT_END]) {
             float clamp_pos = 0.0f;
             switch (arm_cmd.clamp_state) {
-                case ClampState::Open:    clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.max_val; break;
-                case ClampState::Close:   clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.min_val; break;
-                case ClampState::SetZero: clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.max_val/2; break;
+                case ClampState::Open:    clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.min_val; break;
+                case ClampState::Close:   clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.max_val; break;
+                case ClampState::SetZero: clamp_pos = ARM_JOINT_RAW_LIMITS.J_end.min_val/3; break;
             }
             joints_[ARM_JOINT_END]->control(clamp_pos, parm_.J_parm[ARM_JOINT_END].speed_max,
                 parm_.J_parm[ARM_JOINT_END].Kp, parm_.J_parm[ARM_JOINT_END].Kd, 0);
