@@ -35,11 +35,6 @@ namespace arm {
         return z;
     }
 
-    // 角度归一化到 [-π, π]
-    inline float wrapPi(float x) {
-        return atan2f(sinf(x), cosf(x));
-    }
-
     struct app_Arm_data_t {
         bool angle_upd{false};
         bool range_state{false};
@@ -50,6 +45,8 @@ namespace arm {
         Matrixf<6, 1> upd_angle;
         Matrixf<6, 1> upd_tar;
         uint32_t clc_time[5] = {};
+        uint8_t best_idx_t;
+        int16_t tmp;
     };
 
     class Arm_link {
@@ -319,12 +316,14 @@ namespace arm {
             }
             for (uint8_t i = 0; i < validCount; i++) {
                 float dist = 0.0f;
+                const float W_J3 = 4.0f;
                 for (uint8_t j = 0; j < 6; j++) {
                     float diff = arm_theta.cur_angle[i][j] - cur_q[j][0];
-                    // 处理角度周期性：选择最短路径
+                    // 处理角度周期性
                     if (diff > M_PI) diff -= 2.0f * M_PI;
                     if (diff < -M_PI) diff += 2.0f * M_PI;
-                    dist += diff * diff;
+                    float w = (j == 3) ? W_J3 : 1.0f;  // J3 加重
+                    dist += w * diff * diff;
                 }
 
                 diff_tmp[i] = dist;
@@ -335,7 +334,8 @@ namespace arm {
                 }
             }
 
-            best_idx_t = best_idx;
+            arm_theta.tmp = diff_tmp[best_idx];
+            arm_theta.best_idx_t = best_idx_t = best_idx;
             arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
             arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
         }

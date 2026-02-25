@@ -170,20 +170,12 @@ static void get_DM_angle(float pos[3], float rpy[3]) {
         memcpy(gimbal_arm.tar_rpy, rpy, sizeof(gimbal_arm.tar_rpy));
         memcpy(gimbal_arm.tar_xyz, pos, sizeof(gimbal_arm.tar_xyz));
 
-        // gimbal_arm.tar_rpy[0] = -104.1f * M_PI / 180.0f;
-        // gimbal_arm.tar_rpy[1] =   17.9f * M_PI / 180.0f;
-        // gimbal_arm.tar_rpy[2] = -100.8f * M_PI / 180.0f;
-        //
-        // gimbal_arm.tar_xyz[0] = 0.264f;
-        // gimbal_arm.tar_xyz[1] = 0.204f;
-        // gimbal_arm.tar_xyz[2] = 0.554f;
-
         gimbal_arm.q_data[0] = DM_Joint0.status.pos;
         gimbal_arm.q_data[1] = -(DM_Joint1.status.pos - 90.0f * M_PI / 180);
         gimbal_arm.q_data[2] = DM_Joint2.status.pos - 90.0f * M_PI / 180;
         gimbal_arm.q_data[3] = DM_Joint3.status.pos;
         gimbal_arm.q_data[4] = DM_Joint4.status.pos;
-        gimbal_arm.q_data[5] = DM_Joint5.status.pos;
+        gimbal_arm.q_data[5] = arm::wrapPi(DM_Joint5.status.pos);
         gimbal_arm.end_angle = DM_Joint_End.status.pos;
         gimbal_arm.angle_upd = true;
     }
@@ -239,6 +231,8 @@ void app_gimbal_task(void *args) {
     float pos[3], rpy[3];
     float lst_pos[3] = {}, lst_rpy[3] = {};
     Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
+
+    OS::Task::SleepMilliseconds(3000);
 
     while(true) {
         if (bsp_time_get_ms() - rc->timestamp < 100) {
@@ -305,15 +299,16 @@ void app_gimbal_task(void *args) {
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            arm_data->pos[0][0] * 180/M_PI,
-            arm_data->pos[1][0] * 180/M_PI,
-            arm_data->pos[2][0] * 180/M_PI,
+            // arm_data->pos[0][0] * 180/M_PI,
+            // arm_data->pos[1][0] * 180/M_PI,
+            // arm_data->pos[2][0] * 180/M_PI,
             // gimbal_arm.q_data[0] * 180/M_PI,
             // gimbal_arm.q_data[1] * 180/M_PI,
             // gimbal_arm.q_data[2] * 180/M_PI,
-            gimbal_arm.q_data[3] * 180/M_PI,
-            gimbal_arm.q_data[4] * 180/M_PI,
+            // gimbal_arm.q_data[3] * 180/M_PI,
+            // gimbal_arm.q_data[4] * 180/M_PI,
             gimbal_arm.q_data[5] * 180/M_PI,
+            DM_Joint5.status.pos * 180/M_PI,
             // arm_clc->T_arm_end[0][3],
             // arm_clc->T_arm_end[1][3],
             // arm_clc->T_arm_end[2][3],
@@ -323,12 +318,29 @@ void app_gimbal_task(void *args) {
             // rpy[0],
             // rpy[1],
             // rpy[2],
-            tmp_pos[0][0] * 180/M_PI,
-            tmp_pos[1][0] * 180/M_PI,
-            tmp_pos[2][0] * 180/M_PI,
-            tmp_pos[3][0] * 180/M_PI,
-            tmp_pos[4][0] * 180/M_PI,
-            tmp_pos[5][0] * 180/M_PI
+            // tmp_pos[0][0] * 180/M_PI,
+            // tmp_pos[1][0] * 180/M_PI,
+            // tmp_pos[2][0] * 180/M_PI,
+            // tmp_pos[3][0] * 180/M_PI,
+            // tmp_pos[4][0] * 180/M_PI,
+            // tmp_pos[5][0] * 180/M_PI,
+            // arm_clc->upd_angle[3][0] * 180/M_PI,
+            // arm_clc->upd_angle[4][0] * 180/M_PI,
+            // arm_clc->upd_angle[5][0] * 180/M_PI,
+            // arm_clc->cur_angle[0][3] * 180/M_PI,
+            // arm_clc->cur_angle[0][4] * 180/M_PI,
+            // arm_clc->cur_angle[0][5] * 180/M_PI,
+            // arm_clc->cur_angle[1][3] * 180/M_PI,
+            // arm_clc->cur_angle[1][4] * 180/M_PI,
+            // arm_clc->cur_angle[1][5] * 180/M_PI,
+            // arm_clc->cur_angle[arm_clc->best_idx_t][3] * 180/M_PI,
+            // arm_clc->cur_angle[arm_clc->best_idx_t][4] * 180/M_PI,
+            // arm_clc->cur_angle[arm_clc->best_idx_t][5] * 180/M_PI,
+            // DM_Joint5.status.pos,
+            // g_arm_controller.q_ref_[5][0],
+            arm_clc->best_idx_t,
+            arm_clc->validCount,
+            arm_clc->tmp
             // g_arm_controller.getState(),
             // DM_Joint_End.status.pos * 180/M_PI
             // chassis_save_state[1]
@@ -341,7 +353,8 @@ void app_gimbal_task(void *args) {
 
 void app_gimbal_init() {
     g_arm_controller.init();
-    g_arm_controller.setUseFri(arm::ARM_JOINT_3, 1.6, 2.7);
+    g_arm_controller.setUseFri(arm::ARM_JOINT_3, 1.6, 2.6);
+    g_arm_controller.setUseSumAngle(arm::ARM_JOINT_5);
 }
 
 #endif

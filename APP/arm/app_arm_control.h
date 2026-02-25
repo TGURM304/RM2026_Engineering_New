@@ -11,6 +11,7 @@
 #include "dev_motor_dm.h"
 #include <matrix.h>
 #include <array>
+#include <cmath>
 #include <memory>
 #include <cstdint>
 
@@ -84,8 +85,9 @@ namespace arm {
 
         const Matrixf<6, 1>& getCurrentQRef() const { return q_ref_; }
 
+        void setUseSumAngle(ArmJointModel l) { use_sum_angle_[l] = true; }
         void setUseFri(ArmJointModel l, float fri, float k_f) {
-            use_joint_fri[l] = true;
+            use_joint_fri_[l] = true;
             parm_.J_parm[l].joint_fri = fri;
             parm_.J_parm[l].k_f = k_f;
         }
@@ -97,20 +99,30 @@ namespace arm {
             return &data_;
         }
 
+        Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
     private:
         void applyJointLimits(Matrixf<6, 1>& q) const {
             for (uint8_t i = 0; i < 6; i++) {
-                if (q[i][0] > ARM_JOINT_RAW_LIMITS.J[i].max_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].max_val;
-                if (q[i][0] < ARM_JOINT_RAW_LIMITS.J[i].min_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].min_val;
+                if (i == 5 && use_sum_angle_[i]) {
+                    // 将目标[-π,π]换算到距当前cur最近的等价角度
+                    float target = q[i][0], cur = data_.pos[i][0];
+                    const float two_pi = 2.0f * M_PI;
+                    float k = roundf((cur - target) / two_pi);
+                    q[i][0] = target + k * two_pi;
+                } else {
+                    if (q[i][0] > ARM_JOINT_RAW_LIMITS.J[i].max_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].max_val;
+                    if (q[i][0] < ARM_JOINT_RAW_LIMITS.J[i].min_val) q[i][0] = ARM_JOINT_RAW_LIMITS.J[i].min_val;
+                }
             }
         }
 
         Motor::DMMotor* joints_[7]{};
-        Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
+        // Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
         Matrixf<6, 1> g_ref_ = matrixf::zeros<6, 1>();
 
         bool valid_{false};
-        bool use_joint_fri[ARM_JOINT_COUNT]{};            // 是否使用关节摩擦力补偿
+        bool use_joint_fri_[ARM_JOINT_COUNT]{};            // 是否使用关节摩擦力补偿
+        bool use_sum_angle_[ARM_JOINT_COUNT]{};              // 是否使用总角度计算：目标[-π,π]换算到距当前cur最近的角度
         arm_parm parm_;
         arm_data_t data_;   // 当前状态
         ArmState arm_state_{ArmState::Relax};

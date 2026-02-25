@@ -48,7 +48,7 @@ namespace arm {
          { -47.0f * M_PI / 180.0f, 103.0f * M_PI / 180.0f},
          {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
          { -80.0f * M_PI / 180.0f,  82.0f * M_PI / 180.0f},
-         {-M_PI, M_PI}},
+         {-65535, 65535}},
         {-80.0f * M_PI / 180.0f, -0.0f * M_PI / 180.0f}
     };
 
@@ -58,9 +58,14 @@ namespace arm {
          {-137.0f * M_PI / 180.0f,  13.0f * M_PI / 180.0f},
          {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
          { -80.0f * M_PI / 180.0f,  82.0f * M_PI / 180.0f},
-         {-M_PI, M_PI}},
+         {-65535, 65535}},
         {-80.0f * M_PI / 180.0f, -0.0f * M_PI / 180.0f}
     };
+
+    // 角度归一化到 [-π, π]
+    inline float wrapPi(float x) {
+        return atan2f(sinf(x), cosf(x));
+    }
 
     // 改进 DH 旋转矩阵
     // 参数：a - 连杆长度, alpha - 连杆扭角, d - 连杆偏移, theta - 关节角度

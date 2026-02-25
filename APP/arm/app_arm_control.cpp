@@ -91,7 +91,7 @@ namespace arm {
 
         for (uint8_t j = 0; j < 6; j++) {
             if (!joints_[j]) continue;
-            if(use_joint_fri[j]) {
+            if(use_joint_fri_[j]) {
                 float fri_tor = parm_.J_parm[j].joint_fri * tanhf(parm_.J_parm[j].k_f * data_.vel[j][0]);
                 g_ref_[j][0] += fri_tor;
             }
