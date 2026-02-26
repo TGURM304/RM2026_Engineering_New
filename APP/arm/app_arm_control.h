@@ -15,7 +15,9 @@
 #include <memory>
 #include <cstdint>
 
+#include "alg_filter.h"
 #include "ctrl_pid.h"
+#include "bsp_time.h"
 
 #ifdef __cplusplus
 
@@ -28,6 +30,22 @@ namespace arm {
         float Kp, Kd;
         float speed_max, tor_max, tor_min;
         float joint_fri, k_f;
+        float vmax_traj{2.0f};   // 轨迹最大速度 rad/s
+        float amax_traj{2.0f};   // 轨迹最大加速度 rad/s²
+    };
+
+    // T型轨迹参数（单关节）
+    struct TlineParams {
+        float q0{0.f}, q1{0.f}, v0{0.f}, v1{0.f};
+        float Ta{0.f}, Tv{0.f}, Td{0.f}, T{0.f};
+        float vlin{0.f}, Sa{0.f}, Sv{0.f};
+        float amax{0.f};
+        float sign_{1.f};
+        uint64_t t_start_us_{0};
+        bool valid{false};
+        bool trajectory_active_{false};                 //T轨迹规划单次初始化
+        bool state[3]{false, false, false};    // 加速、匀速、减速阶段标志
+        float tmp_t;
     };
 
     struct arm_parm{
@@ -82,9 +100,14 @@ namespace arm {
         void disable();
         void enable();
         void update(const ctrl_out_data_t& arm_cmd);
+        // T型轨迹
+        void planTline(uint8_t j, float q0, float q1, float v0, float v1);
+        void evalTline(uint8_t j, float t, float* q_out, float* qd_out);
 
         const Matrixf<6, 1>& getCurrentQRef() const { return q_ref_; }
-
+        ArmState getState() const { return arm_state_; }
+        void setState(ArmState s) { arm_state_ = s; }
+        void setUseTline(bool use) { use_tline_ = use; }
         void setUseSumAngle(ArmJointModel l) { use_sum_angle_[l] = true; }
         void setUseFri(ArmJointModel l, float fri, float k_f) {
             use_joint_fri_[l] = true;
@@ -92,14 +115,14 @@ namespace arm {
             parm_.J_parm[l].k_f = k_f;
         }
 
-        void setState(ArmState s) { arm_state_ = s; }
-        ArmState getState() const { return arm_state_; }
-
         arm_data_t *app_arm_ctr_data() {
             return &data_;
         }
 
         Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
+        Matrixf<6, 1> q_goal_ = matrixf::zeros<6, 1>();
+        TlineParams tline_[6]{};
+
     private:
         void applyJointLimits(Matrixf<6, 1>& q) const {
             for (uint8_t i = 0; i < 6; i++) {
@@ -116,13 +139,27 @@ namespace arm {
             }
         }
 
+        Algorithm::LowPassFilter joint_filter[6] = {
+            Algorithm::LowPassFilter(3.0),
+            Algorithm::LowPassFilter(3.0),
+            Algorithm::LowPassFilter(3.0),
+            Algorithm::LowPassFilter(3.0),
+            Algorithm::LowPassFilter(3.0),
+            Algorithm::LowPassFilter(3.0)
+        };
+
         Motor::DMMotor* joints_[7]{};
+        // TlineParams tline_[6]{};
         // Matrixf<6, 1> q_ref_ = matrixf::zeros<6, 1>();
         Matrixf<6, 1> g_ref_ = matrixf::zeros<6, 1>();
+        // Matrixf<6, 1> q_goal_ = matrixf::zeros<6, 1>();
+        Matrixf<6, 1> cur_q = matrixf::zeros<6, 1>();
+        Matrixf<6, 1> lst_q = matrixf::zeros<6, 1>();
 
+        bool use_tline_{true};
         bool valid_{false};
-        bool use_joint_fri_[ARM_JOINT_COUNT]{};            // 是否使用关节摩擦力补偿
-        bool use_sum_angle_[ARM_JOINT_COUNT]{};              // 是否使用总角度计算：目标[-π,π]换算到距当前cur最近的角度
+        bool use_joint_fri_[ARM_JOINT_COUNT]{};             // 是否使用关节摩擦力补偿
+        bool use_sum_angle_[ARM_JOINT_COUNT]{};             // 是否使用总角度计算：目标[-π,π]换算到距当前cur最近的角度
         arm_parm parm_;
         arm_data_t data_;   // 当前状态
         ArmState arm_state_{ArmState::Relax};

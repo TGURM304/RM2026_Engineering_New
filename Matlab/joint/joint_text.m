@@ -14,6 +14,7 @@ Base = transl(0.116, 0, 0.091+0.215);   % 基座偏移 100 mm
 Tool = transl(0, 0, 0.150);   % 末端工具偏移 200 mm
 
 T__ = my_fkine(q_input, Base, Tool, a2, a3, d2, d4);
+%                                       Y               P               R
 T_ = transl(0.264, 0.204, 0.554) * trotx(-100.8) * troty(17.9) * trotz(-104.1);
 %T_ = transl(0.264, 0.204, 0.554) * rpy2tr(-104.1, 17.9, -100.8, 'deg');
 disp("正解结果：")
@@ -119,3 +120,14 @@ disp("我的FK结果：")
 disp(T__);
 
 disp(T_);
+
+T_AAA = T_lib.T;
+
+R_lib = T_AAA(1:3, 1:3);
+eul = rotm2eul(R_lib,'XYZ');
+eul_deg = rad2deg(eul);
+fprintf('Yaw: %.2f°, Pitch: %.2f°, Roll: %.2f°\n', eul_deg);
+
+rpy = tr2rpy(T__);
+rpy_deg = rad2deg(rpy);
+fprintf('Yaw: %.2f°, Pitch: %.2f°, Roll: %.2f°\n', rpy_deg);

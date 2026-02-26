@@ -113,7 +113,7 @@ static arm::arm_parm g_arm_parm = {
                     .joint_speed_pid = {12, 5.0f/1000.f, 0, 16, 6},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
             { .use_mit_pd = false,
-                    .joint_pos_pid = {11, 0, 0, 2, 0},
+                    .joint_pos_pid = {11, 0, 0, 6, 0},
                     .joint_speed_pid = {10, 3.5f/1000.f, 0.5f, 10, 5},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 28.0f, .tor_min = -28.0f },
             { .use_mit_pd = true,
@@ -263,21 +263,25 @@ void app_gimbal_task(void *args) {
         if(bsp_time_get_ms() - referee->timestamp < 200) {
             if(bsp_time_get_ms() - referee->custom_controller_timestamp < 200) {
                 float pos_raw[3], rpy_raw[3];
-                pos_raw[0] = -referee->custom_controller.pos_data[0]*1.5f + 0.320f;
-                pos_raw[1] = referee->custom_controller.pos_data[1]*1.5f;
-                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*1.5f + 0.450f;
-                rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
-                rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
-                rpy_raw[2] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
+                pos_raw[0] = -referee->custom_controller.pos_data[0]*3.0f + 0.420f;
+                pos_raw[1] = referee->custom_controller.pos_data[1]*3.0f;
+                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*3.0f + 0.450f;
+
+                // rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
+                // rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
+                // rpy_raw[2] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
+                rpy_raw[0] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
+                rpy_raw[1] = (referee->custom_controller.rpy_data[1]) * M_PI / 180.0f;
+                rpy_raw[2] = -referee->custom_controller.rpy_data[2] * M_PI / 180.0f;
 
                 if (!lpf_inited) {
-                    for (int i = 0; i < 3; ++i) {
+                    for (uint8_t i = 0; i < 3; ++i) {
                         pos_lpf[i].reset(pos_raw[i]);
                         rpy_lpf[i].reset(rpy_raw[i]);
                     }
                     lpf_inited = true;
                 }
-                for (int i = 0; i < 3; ++i) {
+                for (uint8_t i = 0; i < 3; ++i) {
                     pos[i] = static_cast<float>(pos_lpf[i].update(pos_raw[i], 0.001));
                     rpy[i] = static_cast<float>(rpy_lpf[i].update(rpy_raw[i], 0.001));
                 }
@@ -299,6 +303,43 @@ void app_gimbal_task(void *args) {
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
+            // referee->custom_controller.pos_data[0] * 1000,
+            // referee->custom_controller.pos_data[1] * 1000,
+            // referee->custom_controller.pos_data[2] * 1000,
+            // referee->custom_controller.rpy_data[0],
+            // referee->custom_controller.rpy_data[1],
+            // referee->custom_controller.rpy_data[2],
+            gimbal_arm.tar_xyz[0] * 1000,
+            gimbal_arm.tar_xyz[1] * 1000,
+            gimbal_arm.tar_xyz[2] * 1000,
+            gimbal_arm.tar_rpy[0] * 180/M_PI,
+            gimbal_arm.tar_rpy[1] * 180/M_PI,
+            gimbal_arm.tar_rpy[2] * 180/M_PI,
+            arm_clc->T_arm_end[0][3] * 1000,
+            arm_clc->T_arm_end[1][3] * 1000,
+            arm_clc->T_arm_end[2][3] * 1000,
+            // g_arm_controller.q_ref_[0][0] * 180/M_PI,
+            // g_arm_controller.q_ref_[1][0] * 180/M_PI,
+            // g_arm_controller.q_ref_[2][0] * 180/M_PI,
+            // g_arm_controller.q_ref_[3][0] * 180/M_PI,
+            // g_arm_controller.q_ref_[4][0] * 180/M_PI,
+            // g_arm_controller.q_ref_[5][0] * 180/M_PI
+            // g_arm_controller.q_goal_[0][0] * 180/M_PI,
+            // g_arm_controller.q_goal_[1][0] * 180/M_PI,
+            // g_arm_controller.q_goal_[2][0] * 180/M_PI,
+            // g_arm_controller.q_goal_[3][0] * 180/M_PI,
+            // g_arm_controller.q_goal_[4][0] * 180/M_PI,
+            // g_arm_controller.q_goal_[5][0] * 180/M_PI
+            // g_arm_controller.trajectory_active_,
+            // g_arm_controller.tline_[5].amax,
+            // g_arm_controller.tline_[5].T,
+            // g_arm_controller.tline_[5].state[0],
+            // g_arm_controller.tline_[5].state[1],
+            // g_arm_controller.tline_[5].state[2],
+            // g_arm_controller.tline_[5].tmp_t,
+            // g_arm_controller.tline_[5].q0 * 180/M_PI,
+            // g_arm_controller.tline_[5].q1 * 180/M_PI,
+            // arm_data->pos[5][0] * 180/M_PI
             // arm_data->pos[0][0] * 180/M_PI,
             // arm_data->pos[1][0] * 180/M_PI,
             // arm_data->pos[2][0] * 180/M_PI,
@@ -307,26 +348,24 @@ void app_gimbal_task(void *args) {
             // gimbal_arm.q_data[2] * 180/M_PI,
             // gimbal_arm.q_data[3] * 180/M_PI,
             // gimbal_arm.q_data[4] * 180/M_PI,
-            gimbal_arm.q_data[5] * 180/M_PI,
-            DM_Joint5.status.pos * 180/M_PI,
+            // gimbal_arm.q_data[5] * 180/M_PI,
+            // DM_Joint5.status.pos * 180/M_PI,
+            // arm_data->pos[5][0] * 180/M_PI,
             // arm_clc->T_arm_end[0][3],
             // arm_clc->T_arm_end[1][3],
             // arm_clc->T_arm_end[2][3],
-            // pos[0],
-            // pos[1],
-            // pos[2],
-            // rpy[0],
-            // rpy[1],
-            // rpy[2],
             // tmp_pos[0][0] * 180/M_PI,
             // tmp_pos[1][0] * 180/M_PI,
             // tmp_pos[2][0] * 180/M_PI,
             // tmp_pos[3][0] * 180/M_PI,
             // tmp_pos[4][0] * 180/M_PI,
             // tmp_pos[5][0] * 180/M_PI,
-            // arm_clc->upd_angle[3][0] * 180/M_PI,
-            // arm_clc->upd_angle[4][0] * 180/M_PI,
-            // arm_clc->upd_angle[5][0] * 180/M_PI,
+            arm_clc->upd_angle[0][0] * 180/M_PI,
+            arm_clc->upd_angle[1][0] * 180/M_PI,
+            arm_clc->upd_angle[2][0] * 180/M_PI,
+            arm_clc->upd_angle[3][0] * 180/M_PI,
+            arm_clc->upd_angle[4][0] * 180/M_PI,
+            arm_clc->upd_angle[5][0] * 180/M_PI
             // arm_clc->cur_angle[0][3] * 180/M_PI,
             // arm_clc->cur_angle[0][4] * 180/M_PI,
             // arm_clc->cur_angle[0][5] * 180/M_PI,
@@ -338,9 +377,9 @@ void app_gimbal_task(void *args) {
             // arm_clc->cur_angle[arm_clc->best_idx_t][5] * 180/M_PI,
             // DM_Joint5.status.pos,
             // g_arm_controller.q_ref_[5][0],
-            arm_clc->best_idx_t,
-            arm_clc->validCount,
-            arm_clc->tmp
+            // arm_clc->best_idx_t,
+            // arm_clc->validCount,
+            // arm_clc->tmp
             // g_arm_controller.getState(),
             // DM_Joint_End.status.pos * 180/M_PI
             // chassis_save_state[1]

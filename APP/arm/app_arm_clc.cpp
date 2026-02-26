@@ -99,21 +99,11 @@ void app_arm_task(void *args) {
         50.2f * M_PI / 180, 40.5f * M_PI / 180, 112.17f * M_PI / 180,
         40.12f * M_PI / 180, 56.21f * M_PI / 180, 70.7f * M_PI / 180
     };
-    float tar_q[6] = {0, 0, 0, 0, 0, 0};
     float q_d[6] = {0, 1, 0, 1, 0, 0};
     float q_dd[6] = {0, 0, 0, 1, 0, 0};
     float xyz[3] = {}, rpy[3] = {};
 
-    // int8_t rng[6] = {};
-
     while(true) {
-
-        // for(uint8_t i = 0; i < 6; i++) {
-        //     rng[i] = bsp_rng_random(-5, 5);
-        //     q_data[i] += rng[i] * 0.1 * M_PI / 180;
-        //     if (q_data[i] > arm::ARM_JOINT_LIMITS.J[i].max_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].max_val;
-        //     if (q_data[i] < arm::ARM_JOINT_LIMITS.J[i].min_val) q_data[i] = arm::ARM_JOINT_LIMITS.J[i].min_val;
-        // }
 
         if(gimbal_data->angle_upd) {
             memcpy(q_data, gimbal_data->q_data, sizeof(q_data));
@@ -128,8 +118,9 @@ void app_arm_task(void *args) {
         Matrixf<6, 1> tmp_qd(q_d);
         Matrixf<6, 1> tmp_qdd(q_dd);
         Matrixf<4,4> tar_T =
-            Matrixf<4,4>().translation(xyz[0], xyz[1], xyz[2]) *
-            Matrixf<4,4>().rot_rpy(rpy[0], rpy[1], rpy[2]);
+            Matrixf<4, 4>().translation(xyz[0], xyz[1], xyz[2]) *
+            Matrixf<4, 4>().rot_ypr(rpy[2], rpy[1], rpy[0]) *
+            Matrixf<4, 4>().rot_rpy(M_PI, M_PI_2, 0.0f);
 
         arm_->arm_forward_clc(tmp_q);
         // arm_->arm_jacobi_clc();

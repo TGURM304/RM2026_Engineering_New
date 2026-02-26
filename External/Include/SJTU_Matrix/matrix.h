@@ -187,14 +187,14 @@ class Matrixf {
     Matrixf<_rows, _rows> res(data);
     return res;
   }
-  // RPY 旋转矩阵(Yaw->Pitch->Roll)
+  // RPY 旋转矩阵(Roll->Pitch->Yaw)
   Matrixf<_rows, _rows> rot_rpy(const float roll, const float pitch, const float yaw) {
     if(_rows < 3 || _rows > 4) {
       Error_Handler();
     }
-    Matrixf<_rows, _rows> R_z = this->rot_z(roll);
+    Matrixf<_rows, _rows> R_z = this->rot_z(yaw);
     Matrixf<_rows, _rows> R_y = this->rot_y(pitch);
-    Matrixf<_rows, _rows> R_x = this->rot_x(yaw);
+    Matrixf<_rows, _rows> R_x = this->rot_x(roll);
 
     Matrixf<_rows, _rows> R = R_x * R_y * R_z;
     
@@ -203,6 +203,24 @@ class Matrixf {
       R[3][3] = 1.0f;
     }
     
+    return R;
+  }
+  // YPR 旋转矩阵(Yaw->Pitch->Roll)
+  Matrixf<_rows, _rows> rot_ypr(const float roll, const float pitch, const float yaw) {
+    if(_rows < 3 || _rows > 4) {
+      Error_Handler();
+    }
+    Matrixf<_rows, _rows> R_z = this->rot_z(yaw);
+    Matrixf<_rows, _rows> R_y = this->rot_y(pitch);
+    Matrixf<_rows, _rows> R_x = this->rot_x(roll);
+
+    Matrixf<_rows, _rows> R = R_z * R_y * R_x;
+
+    if(_rows == 4) {
+      R[0][3] = R[1][3] = R[2][3] = R[3][0] = R[3][1] = R[3][2] = 0.0f;
+      R[3][3] = 1.0f;
+    }
+
     return R;
   }
 // 平移矩阵
