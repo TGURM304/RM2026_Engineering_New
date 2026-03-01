@@ -164,10 +164,11 @@ void app_chassis_task(void *args) {
 			vx,
 			vy,
 			rotate,
+			gimbal()->vx,
+			gimbal()->vy,
+			gimbal()->rotate,
 			gimbal()->save_state[0],
-			gimbal()->save_state[1],
-			Save_L.speed,
-			Save_R.speed
+			gimbal()->save_state[1]
 		);
 
 		OS::Task::SleepMilliseconds(1);

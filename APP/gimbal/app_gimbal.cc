@@ -227,7 +227,6 @@ void app_gimbal_task(void *args) {
 
     bool use_delta = false;
     static bool lpf_inited = false;
-    // float j0_q = 0, j1_q = 0, j2_q = 0, j3_q = 0, j4_q = 0, j5_q = 0;
     float pos[3], rpy[3];
     float lst_pos[3] = {}, lst_rpy[3] = {};
     Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
@@ -236,23 +235,19 @@ void app_gimbal_task(void *args) {
 
     while(true) {
         if (bsp_time_get_ms() - rc->timestamp < 100) {
-            g_arm_controller.setState(arm::ArmState::Working);
             chassis_vx = rc->rc_l[0] * 1.67f;
             chassis_vy = rc->rc_l[1] * 1.67f;
             chassis_rotate = 3.0f * rc->reserved;
             // chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
-            // j3_q += rc->rc_r[0] * 0.000001f;
-            // j1_q += rc->rc_r[1] * 0.000001f;
-            // j3_q = math::limit(j3_q, arm::ARM_JOINT_RAW_LIMITS.J[3].min_val, arm::ARM_JOINT_RAW_LIMITS.J[3].max_val);
-            // j1_q = math::limit(j1_q, -45 * M_PI / 180, 23 * M_PI / 180);
             if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
             else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
             else arm_out.clamp_state = arm::ClampState::SetZero;
+            if(rc->s_l == -1) g_arm_controller.setState(arm::ArmState::Float);
+            else g_arm_controller.setState(arm::ArmState::Working);
             if(rc->s_l == 1) use_delta = true;
             else use_delta = false;
         } else {
             g_arm_controller.setState(arm::ArmState::Float);
-            // j0_q = j1_q = j2_q = j3_q = j4_q = j5_q = 0;
             chassis_vx = chassis_vy = chassis_rotate = 0;
             chassis_save_state[0] = chassis_save_state[1] = false;
             arm_out.clamp_state = arm::ClampState::Close;
