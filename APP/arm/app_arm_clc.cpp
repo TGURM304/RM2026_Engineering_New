@@ -99,9 +99,11 @@ void app_arm_task(void *args) {
         50.2f * M_PI / 180, 40.5f * M_PI / 180, 112.17f * M_PI / 180,
         40.12f * M_PI / 180, 56.21f * M_PI / 180, 70.7f * M_PI / 180
     };
-    float q_d[6] = {0, 1, 0, 1, 0, 0};
-    float q_dd[6] = {0, 0, 0, 1, 0, 0};
+    float q_d[6] = {0, 0, 0, 0, 0, 0};
+    float q_dd[6] = {0, 0, 0, 0, 0, 0};
     float xyz[3] = {}, rpy[3] = {};
+    float jo_angle = 0.0f;
+    Matrixf<4,4> T_c = Matrixf<4, 4>().translation(chassis_x, 0.0f, 0.0f);
 
     while(true) {
 
@@ -112,6 +114,7 @@ void app_arm_task(void *args) {
             memcpy(xyz, gimbal_data->tar_xyz, sizeof(xyz));
             memcpy(rpy, gimbal_data->tar_rpy, sizeof(rpy));
             arm_->change_a_upd_state(true);
+            jo_angle = gimbal_data->j0_rc;
         }else arm_->change_a_upd_state(false);
 
         Matrixf<6, 1> tmp_q(q_data);
@@ -121,6 +124,9 @@ void app_arm_task(void *args) {
             Matrixf<4, 4>().translation(xyz[0], xyz[1], xyz[2]) *
             Matrixf<4, 4>().rot_ypr(rpy[2], rpy[1], rpy[0]) *
             Matrixf<4, 4>().rot_rpy(M_PI, M_PI_2, 0.0f);
+        Matrixf<4,4> Rz_j0 = Matrixf<4, 4>().rot_z(jo_angle);
+        Matrixf<4,4> T_c_inv = matrixf::inv(T_c);
+        tar_T = T_c * Rz_j0 * T_c_inv * tar_T;
 
         arm_->arm_forward_clc(tmp_q);
         // arm_->arm_jacobi_clc();

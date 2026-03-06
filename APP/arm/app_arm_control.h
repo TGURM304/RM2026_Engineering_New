@@ -64,6 +64,7 @@ namespace arm {
 
     // 当前状态
     struct arm_data_t {
+        bool Tline_state{false};
         Matrixf<6, 1> pos;
         Matrixf<6, 1> vel;
         float clamp_pos{0.f};
@@ -72,8 +73,10 @@ namespace arm {
     };
     // 目标状态
     struct ctrl_out_data_t {
+        bool use_Tline{false};
         Matrixf<6, 1> g_tor_ref;
         Matrixf<6, 1> pos_ref;
+        Matrixf<6, 1> pos_Tline;
         ClampState clamp_state{ClampState::Open};
     };
 
@@ -105,6 +108,7 @@ namespace arm {
         void evalTline(uint8_t j, float t, float* q_out, float* qd_out);
 
         const Matrixf<6, 1>& getCurrentQRef() const { return q_ref_; }
+        const Matrixf<6, 1>& get_waiting_deg() const { return parm_.waiting_deg; }
         ArmState getState() const { return arm_state_; }
         void setState(ArmState s) { arm_state_ = s; }
         void setUseTline(bool use) { use_tline_ = use; }
@@ -126,6 +130,9 @@ namespace arm {
     private:
         void applyJointLimits(Matrixf<6, 1>& q) const {
             for (uint8_t i = 0; i < 6; i++) {
+                if (!std::isfinite(q[i][0])) {
+                    q[i][0] = parm_.waiting_deg[i][0];
+                }
                 if (i == 5 && use_sum_angle_[i]) {
                     // 将目标[-π,π]换算到距当前cur最近的等价角度
                     float target = q[i][0], cur = data_.pos[i][0];

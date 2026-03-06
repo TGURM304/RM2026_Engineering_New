@@ -25,6 +25,7 @@ namespace arm {
                 OS::Task::SleepMilliseconds(1);
             }
         }
+        q_ref_ = q_goal_ = parm_.waiting_deg;
         arm_state_ = ArmState::Waiting;
     }
 
@@ -68,8 +69,6 @@ namespace arm {
         data_.arm_state = arm_state_;
         data_.clamp_state = clamp_state_;
 
-        // 暂未完善保护
-
         // 位置超限失能保护
         float lim = 5*M_PI/180;
         for (uint8_t i = 0; i < 6; i++) {
@@ -106,40 +105,49 @@ namespace arm {
             for (uint8_t i = 0; i < 6; i++) {
                 tline_[i].trajectory_active_ = false;
             }
-            applyJointLimits(q_ref_);
         }else {
+            // if (arm_cmd.use_Tline && use_tline_) {
+            //     Matrixf<6, 1> target = arm_cmd.pos_Tline;
+            //     applyJointLimits(target);
+            //     const float pos_thresh = 1e-2f;
+            //     bool any_tline_active = false;
+            //     for (uint8_t j = 0; j < 6; j++) {
+            //         if (fabsf(target[j][0] - q_goal_[j][0]) > pos_thresh) {
+            //             q_goal_[j][0] = target[j][0];
+            //             planTline(j, data_.pos[j][0], target[j][0], data_.vel[j][0], 0.0f);
+            //             tline_[j].t_start_us_ = bsp_time_get_us();
+            //             tline_[j].trajectory_active_ = true;
+            //         }
+            //         if (tline_[j].trajectory_active_) {
+            //             float t_elapsed = static_cast<float>(bsp_time_get_us() - tline_[j].t_start_us_) * 1e-6f;
+            //             if (t_elapsed >= tline_[j].T) {
+            //                 tline_[j].trajectory_active_ = false;
+            //                 q_ref_[j][0] = q_goal_[j][0];
+            //             } else {
+            //                 float q_now, qd_now;
+            //                 evalTline(j, t_elapsed, &q_now, &qd_now);
+            //                 q_ref_[j][0] = q_now;
+            //             }
+            //             any_tline_active = any_tline_active || tline_[j].trajectory_active_;
+            //         } else {
+            //             q_ref_[j][0] = q_goal_[j][0];
+            //         }
+            //         if (!std::isfinite(q_ref_[j][0])) {
+            //             q_ref_[j][0] = data_.pos[j][0];
+            //             tline_[j].trajectory_active_ = false;
+            //         }
+            //     }
+            //     data_.Tline_state = any_tline_active;
+            // } else {
             q_ref_ = arm_cmd.pos_ref;
-            applyJointLimits(q_ref_);
-            clamp_state_ = arm_cmd.clamp_state;
-            // Matrixf<6, 1> target = arm_cmd.pos_ref;
-            // applyJointLimits(target);
-            //
-            // const float pos_thresh = 1e-2f;
-            // bool t_change[6] = {false, false, false, false, false, false};
-            // for (uint8_t j = 0; j < 6; j++) {
-            //     if (fabsf(target[j][0] - q_goal_[j][0]) > pos_thresh) {
-            //         t_change[j] = true;
-            //     }
-            //     if (t_change[j] && use_tline_) {
-            //         q_goal_[j][0] = target[j][0];
-            //         tline_[j].t_start_us_ = bsp_time_get_us();
-            //         tline_[j].trajectory_active_ = true;
-            //         planTline(j, data_.pos[j][0], target[j][0], data_.vel[j][0], 0.0f);
-            //     }
-            //     if (tline_[j].trajectory_active_ && use_tline_) {
-            //         float t_elapsed = static_cast<float>(bsp_time_get_us() - tline_[j].t_start_us_) * 1e-6f;
-            //         bool all_done = true;
-            //         if (t_elapsed < tline_[j].T) all_done = false;
-            //         tline_[j].tmp_t = t_elapsed;
-            //         float q_now, qd_now;
-            //         evalTline(j, t_elapsed, &q_now, &qd_now);
-            //         q_ref_[j][0] = q_now;
-            //         if (all_done) tline_[j].trajectory_active_ = false;
-            //     } else {
-            //         q_ref_[j][0] = target[j][0];
-            //     }
+            data_.Tline_state = false;
+            for (uint8_t j = 0; j < 6; j++) {
+                tline_[j].trajectory_active_ = false;
+            }
             // }
+            clamp_state_ = arm_cmd.clamp_state;
         }
+        applyJointLimits(q_ref_);
 
         for (uint8_t j = 0; j < 6; j++) {
             if (!joints_[j]) continue;
@@ -234,7 +242,7 @@ namespace arm {
             return;
         }
 
-        tline_->state[0] = tline_->state[1] = tline_->state[2] = false;
+        tline_[j].state[0] = tline_[j].state[1] = tline_[j].state[2] = false;
 
         if (t <= 0.f) {
             *q_out = tline_[j].q0;
@@ -247,15 +255,15 @@ namespace arm {
         //     return;
         // }
         if (t < tline_[j].Ta) {
-            tline_->state[0] = true;
+            tline_[j].state[0] = true;
             *q_out = tline_[j].q0 + tline_[j].v0*t + tline_[j].amax*t*t*0.5f;
             *qd_out = tline_[j].v0 + tline_[j].amax*t;
         } else if (t < tline_[j].Ta + tline_[j].Tv) {
-            tline_->state[1] = true;
+            tline_[j].state[1] = true;
             *q_out = tline_[j].q0 + tline_[j].Sa + tline_[j].vlin*(t - tline_[j].Ta);
             *qd_out = tline_[j].vlin;
         } else {
-            tline_->state[2] = true;
+            tline_[j].state[2] = true;
             float t_dec = t - tline_[j].Ta - tline_[j].Tv;
             *q_out = tline_[j].q0 + tline_[j].Sa + tline_[j].Sv + tline_[j].vlin*t_dec - tline_[j].amax*t_dec*t_dec*0.5f;
             *qd_out = tline_[j].vlin - tline_[j].amax*t_dec;

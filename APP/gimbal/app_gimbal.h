@@ -14,6 +14,7 @@ typedef struct {
     float q_data[6];
     float q_d[6];
     float q_dd[6];
+    float j0_rc;
 } gimbal_arm_t;
 
 #ifdef __cplusplus
