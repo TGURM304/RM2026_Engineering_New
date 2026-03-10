@@ -185,9 +185,16 @@ namespace arm {
             float ax = T06[0][2], ay = T06[1][2], az = T06[2][2];
             float px = T06[0][3], py = T06[1][3], pz = T06[2][3];
 
+            if (!std::isfinite(px) || !std::isfinite(py) || !std::isfinite(pz) ||
+                !std::isfinite(ax) || !std::isfinite(ay) || !std::isfinite(az)) {
+                arm_theta.raw_data = matrixf::zeros<8, 6>();
+                arm_theta.range_state = false;
+                return;
+            }
+
             float ForJudgment = px*px + py*py - d2*d2;
 
-            if (ForJudgment < -1e-6) {
+            if (!std::isfinite(ForJudgment) || ForJudgment < -1e-6) {
                 arm_theta.raw_data = matrixf::zeros<8, 6>();
                 arm_theta.range_state = false;
                 return;
@@ -205,7 +212,13 @@ namespace arm {
             // theta3 (2个)
             float theta3[2];
             float k_t = (px*px + py*py + pz*pz - a2*a2 - a3*a3 - d2*d2 - d4*d4) / (2.0f*a2);
-            float sqrt_k = sqrtf(a3*a3 + d4*d4 - k_t*k_t);
+            float sqrt_arg = a3*a3 + d4*d4 - k_t*k_t;
+            if (sqrt_arg < 1e-6 || !std::isfinite(sqrt_arg)) {
+                arm_theta.raw_data = matrixf::zeros<8, 6>();
+                arm_theta.range_state = false;
+                return;
+            }
+            float sqrt_k = sqrtf(sqrt_arg);
             theta3[0] = -atan2f(a3, d4) + atan2f(k_t, sqrt_k);
             theta3[1] = -atan2f(a3, d4) + atan2f(k_t, -sqrt_k);
 
@@ -306,10 +319,27 @@ namespace arm {
         // 解的选择
         void select_angle() {
             lst_clc_time[4] = bsp_time_get_us();
-            if (validCount == 0) arm_theta.upd_angle = matrixf::zeros<6, 1>();
+            if (validCount == 0) {
+                arm_theta.upd_angle = matrixf::zeros<6, 1>();
+                arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
+                return;
+            }
 
             float min_dist = 1e10f;
             uint8_t best_idx = 0;
+            bool cur_q_valid = true;
+            for (uint8_t j = 0; j < 6; j++) {
+                if (!std::isfinite(cur_q[j][0])) {
+                    cur_q_valid = false;
+                    break;
+                }
+            }
+            if (!cur_q_valid) {
+                arm_theta.upd_angle = arm_theta.cur_angle.row(0).trans();
+                arm_theta.best_idx_t = best_idx_t = 0;
+                arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
+                return;
+            }
 
             for (uint8_t i = 0; i < 8; i++) {
                 diff_tmp[i] = 0;

@@ -4,10 +4,13 @@ clear;
 %% 1. 参数设置
 format short;
 
-num = 50000;   % 采样点数
+num = 100000;   % 采样点数
 
 %% 2. 定义你的 MDH 机械臂 IRB4600
-d2 = 14.64; a2 = 360; d4 = 250; a3 = -90;
+a2 = 0.380;
+a3 = -0.0785; % 未知
+d2 = 0.0285; % 未知
+d4 = 0.22571;
 
 L1 = Link([0 0 0 0],'modified');
 L2 = Link([0 d2 0 pi/2],'modified');
@@ -16,16 +19,16 @@ L4 = Link([0 d4 a3 pi/2],'modified');
 L5 = Link([0 0 0 -pi/2],'modified');
 L6 = Link([0 0 0 pi/2],'modified');
 
-L1.qlim = [-150 150]*pi/180;
-L2.qlim = [  64 140]*pi/180;
-L3.qlim = [-145  19]*pi/180;
-L4.qlim = [-180 180]*pi/180;
-L5.qlim = [-120 120]*pi/180;
+L1.qlim = [-240 245]*pi/180;
+L2.qlim = [  27 140]*pi/180;
+L3.qlim = [-137  13]*pi/180;
+L4.qlim = [-175 115]*pi/180;
+L5.qlim = [-85 87]*pi/180;
 L6.qlim = [-180 180]*pi/180;
 
 IRB4600 = SerialLink([L1 L2 L3 L4 L5 L6],'name','IRB4600');
-IRB4600.base = transl(0,0,80);
-IRB4600.tool = transl(0,0,170+250);
+IRB4600.base = transl(0.116,0,0.091+0.215);
+IRB4600.tool = transl(0,0,0.150);
 
 robot = IRB4600;  % 这里可以方便后续换机械臂
 
@@ -71,3 +74,14 @@ Point_range = [
 ];
 disp('工作空间范围 [min  max]：');
 disp(Point_range);
+
+%% 8. ===== 精细包络 =====
+alpha = 0.06;   % 可以调节精度
+
+shp = alphaShape(figure_x, figure_y, figure_z, alpha);
+
+plot(shp,'FaceAlpha',0.15,'EdgeColor','none','FaceColor',[0 0.5 1]);
+
+title('IRB4600 工作空间（AlphaShape包络）')
+
+hold off

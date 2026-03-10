@@ -131,16 +131,14 @@ struct app_referee_sentry_info_t {
 struct app_referee_custom_controller_t {
     float pos_data[3];
     float rpy_data[3];
-    // uint16_t key;
-    // struct {
-    //     bool key1 : 1;
-    //     bool key2 : 1;
-    //     bool key3 : 1;
-    //     bool key4 : 1;
-    //     bool key5 : 1;
-    // } __attribute__((packed)) key;
-    // float reserved;
-    uint8_t fuck[6];
+    int16_t rs_data[2];
+    struct {
+        bool key1 : 1;
+        bool key2 : 1;
+        bool key3 : 1;
+        bool key4 : 1;
+    } __attribute__((packed)) key;
+    uint8_t fuck;
 } __attribute__ ((packed));
 
 // 0x0304 - 客户端控制（图传链路）

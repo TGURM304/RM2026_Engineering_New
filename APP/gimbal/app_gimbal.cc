@@ -119,10 +119,10 @@ static const float save2_deg_q[6] = {
 
 static arm::arm_parm g_arm_parm = {
     .J_parm = {
-            { .use_mit_pd = true,
-                    .joint_pos_pid = {0, 0, 0, 0, 0},
-                    .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp = 20.0f, .Kd = 3.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+            { .use_mit_pd = false,
+                    .joint_pos_pid = {7, 0.2f, 0, 3, 0},
+                    .joint_speed_pid = {1.5, 2.5f/1000.f, 0, 5, 3},
+                    .Kp = 0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = false,
                     .joint_pos_pid = {15, 0, 0, 1, 0},
                     .joint_speed_pid = {15, 4.5f/1000.f, 0.5f, 26, 10},
@@ -188,8 +188,13 @@ static void get_DM_angle(float pos[3], float rpy[3], float& j0_rc_angle) {
     }else if(arm_data->arm_state == arm::ArmState::Working || arm_data->arm_state == arm::ArmState::Waiting ||
             arm_data->arm_state == arm::ArmState::Float) {
         gimbal_arm.angle_upd = true;
+        if (!std::isfinite(j0_rc_angle)) j0_rc_angle = 0.0f;
         gimbal_arm.j0_rc = j0_rc_angle;
         // else gimbal_arm.j0_rc = 0.0f;
+        for (int i = 0; i < 3; i++) {
+            if (!std::isfinite(pos[i])) pos[i] = 0.0f;
+            if (!std::isfinite(rpy[i])) rpy[i] = 0.0f;
+        }
         memcpy(gimbal_arm.tar_rpy, rpy, sizeof(gimbal_arm.tar_rpy));
         memcpy(gimbal_arm.tar_xyz, pos, sizeof(gimbal_arm.tar_xyz));
 
@@ -267,8 +272,9 @@ void app_gimbal_task(void *args) {
             chassis_rotate = 3.0f * rc->reserved;
             // chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
             j0_rc_angle -= rc->rc_r[0] * (M_PI / 660.0f) * 0.0005f;
-            if (j0_rc_angle >  150*M_PI/180) j0_rc_angle =  150*M_PI/180;
-            if (j0_rc_angle < -150*M_PI/180) j0_rc_angle = -150*M_PI/180;
+            j0_rc_angle = math::limit(j0_rc_angle,
+                arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].min_val,
+                arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].max_val);
             //末端状态
             if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
             else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
@@ -293,8 +299,8 @@ void app_gimbal_task(void *args) {
             if(bsp_time_get_ms() - referee->custom_controller_timestamp < 200) {
                 float pos_raw[3], rpy_raw[3];
                 pos_raw[0] = -referee->custom_controller.pos_data[0]*3.0f + 0.420f;
-                pos_raw[1] =  referee->custom_controller.pos_data[1]*3.0f;
-                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*3.0f + 0.450f;
+                pos_raw[1] = -referee->custom_controller.pos_data[1]*3.0f;
+                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*4.0f + 0.550f;
 
                 // rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
                 // rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
@@ -373,8 +379,8 @@ void app_gimbal_task(void *args) {
             // gimbal_arm.tar_rpy[0] * 180/M_PI,
             // gimbal_arm.tar_rpy[1] * 180/M_PI,
             // gimbal_arm.tar_rpy[2] * 180/M_PI,
-            // bsp_time_get_ms() - referee->timestamp,
-            // bsp_time_get_ms() - referee->custom_controller_timestamp,
+            bsp_time_get_ms() - referee->timestamp,
+            bsp_time_get_ms() - referee->custom_controller_timestamp,
             // arm_clc->validCount,
             // arm_clc->best_idx_t
             arm_clc->upd_angle[0][0] * 180/M_PI,
@@ -382,10 +388,11 @@ void app_gimbal_task(void *args) {
             arm_clc->upd_angle[2][0] * 180/M_PI,
             arm_clc->upd_angle[3][0] * 180/M_PI,
             arm_clc->upd_angle[4][0] * 180/M_PI,
-            arm_clc->upd_angle[5][0] * 180/M_PI,
-            gimbal_arm.j0_rc,
-            j0_rc_angle,
-            arm_data->pos[0][0]
+            arm_clc->upd_angle[5][0] * 180/M_PI
+            // arm_data->pos[0][0] * 180/M_PI,
+            // arm_data->vel[0][0],
+            // g_arm_controller.joint(arm::ARM_JOINT_0)->status.torque,
+            // g_arm_controller.joint(arm::ARM_JOINT_0)->status.vel
         );
 
         OS::Task::SleepMilliseconds(1);
