@@ -17,6 +17,12 @@
 #define arm_d2      0.0227f
 #define arm_d4      0.22571f
 #define arm_end_z   0.150f
+// #define arm_j0_h    0.091f
+// #define arm_a2      0.390f
+// #define arm_a3     -0.0785f
+// #define arm_d2      0.0227f
+// #define arm_d4      0.27505f
+// #define arm_end_z   0.150f
 
 #ifdef __cplusplus
 
