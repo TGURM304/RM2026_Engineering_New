@@ -352,7 +352,7 @@ namespace arm {
                     // 处理角度周期性
                     if (diff > M_PI) diff -= 2.0f * M_PI;
                     if (diff < -M_PI) diff += 2.0f * M_PI;
-                    float w = (j == 3) ? W_J3 : 1.0f;  // J3 加重
+                    float w = (j == 3) ? W_J3 : 1.0f;  // J3 加权
                     dist += w * diff * diff;
                 }
 
