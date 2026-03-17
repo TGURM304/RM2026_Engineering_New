@@ -12,17 +12,11 @@
 #define chassis_x   0.116f
 #define chassis_h   0.215f
 #define arm_j0_h    0.091f
-#define arm_a2      0.350f
-#define arm_a3     -0.090f
+#define arm_a2      0.390f
+#define arm_a3     -0.0785f
 #define arm_d2      0.0227f
-#define arm_d4      0.22571f
+#define arm_d4      0.27505f
 #define arm_end_z   0.150f
-// #define arm_j0_h    0.091f
-// #define arm_a2      0.390f
-// #define arm_a3     -0.0785f
-// #define arm_d2      0.0227f
-// #define arm_d4      0.27505f
-// #define arm_end_z   0.150f
 
 #ifdef __cplusplus
 
@@ -50,9 +44,10 @@ namespace arm {
 
     inline const ArmJointLimits ARM_JOINT_RAW_LIMITS = {
         {{-240.0f * M_PI / 180.0f, 245.0f * M_PI / 180.0f},
-         { -45.0f * M_PI / 180.0f,  23.0f * M_PI / 180.0f},
-         { -47.0f * M_PI / 180.0f, 103.0f * M_PI / 180.0f},
-         {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
+         { -62.0f * M_PI / 180.0f,  51.0f * M_PI / 180.0f},
+         { -47.0f * M_PI / 180.0f, 108.0f * M_PI / 180.0f},
+         // {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
+         {-65535, 65535},
          { -85.0f * M_PI / 180.0f,  87.0f * M_PI / 180.0f},
          {-65535, 65535}},
         {-80.0f * M_PI / 180.0f, -0.0f * M_PI / 180.0f}

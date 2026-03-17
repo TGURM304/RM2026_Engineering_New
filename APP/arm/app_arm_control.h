@@ -133,7 +133,7 @@ namespace arm {
                 if (!std::isfinite(q[i][0])) {
                     q[i][0] = parm_.waiting_deg[i][0];
                 }
-                if (i == 5 && use_sum_angle_[i]) {
+                if ((i == 3 || i == 5) && use_sum_angle_[i]) {
                     // 将目标[-π,π]换算到距当前cur最近的等价角度
                     float target = q[i][0], cur = data_.pos[i][0];
                     const float two_pi = 2.0f * M_PI;
