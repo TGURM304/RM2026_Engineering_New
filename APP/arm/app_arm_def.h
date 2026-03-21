@@ -48,19 +48,19 @@ namespace arm {
          { -47.0f * M_PI / 180.0f, 108.0f * M_PI / 180.0f},
          // {-175.0f * M_PI / 180.0f, 115.0f * M_PI / 180.0f},
          {-65535, 65535},
-         { -85.0f * M_PI / 180.0f,  87.0f * M_PI / 180.0f},
+         { -86.0f * M_PI / 180.0f,  86.0f * M_PI / 180.0f},
          {-65535, 65535}},
         {-80.0f * M_PI / 180.0f, -0.0f * M_PI / 180.0f}
     };
 
     inline const ArmJointLimits ARM_JOINT_LIMITS = {
-        {{ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_0].min_val / 1.5f, ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_0].max_val / 1.5f},
-         {-(ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_1].min_val - static_cast<float>(M_PI_2)), -(ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_1].max_val - static_cast<float>(M_PI_2))},
-         {(ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_2].min_val - static_cast<float>(M_PI_2)), (ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_2].max_val - static_cast<float>(M_PI_2))},
-         {ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_3].min_val, ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_3].max_val},
-         {ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_4].min_val, ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_4].max_val},
-         {ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_5].min_val, ARM_JOINT_RAW_LIMITS.J[ARM_JOINT_5].max_val}},
-        {ARM_JOINT_RAW_LIMITS.J_end.min_val, ARM_JOINT_RAW_LIMITS.J_end.max_val}
+        {{-240.0f / 1.5f * M_PI / 180.0f, 245.0f / 1.5f * M_PI / 180.0f},
+         {-39.0f * M_PI / 180.0f, 152.0f * M_PI / 180.0f},
+         {-137.0f * M_PI / 180.0f,  18.0f * M_PI / 180.0f},
+         {-65535, 65535},
+         { -86.0f * M_PI / 180.0f,  86.0f * M_PI / 180.0f},
+         {-65535, 65535}},
+        {-80.0f * M_PI / 180.0f, -0.0f * M_PI / 180.0f}
     };
 
     // 角度归一化到 [-π, π]

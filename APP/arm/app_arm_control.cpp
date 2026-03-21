@@ -189,7 +189,7 @@ namespace arm {
         if (j >= 6) return;
         float dq = q1 - q0;
         const float eps = 1e-6f;
-        if (fabsf(dq) < eps && fabsf(v0) < eps && fabsf(v1) < eps) {
+        if (std::fabs(dq) < eps && std::fabs(v0) < eps && std::fabs(v1) < eps) {
             tline_[j].q0 = q0, tline_[j].q1 = q1;
             tline_[j].v0 = v0, tline_[j].v1 = v1;
             tline_[j].T = 0.f;

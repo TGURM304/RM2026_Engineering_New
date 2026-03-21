@@ -8,6 +8,7 @@
 #include "bsp_time.h"
 
 #include <matrix.h>
+#include <cmath>
 
 #include "app_arm_def.h"
 
@@ -247,7 +248,7 @@ namespace arm {
                 float tem4_1 = ax*s1 - ay*c1;
                 float tem4_2 = ax*c1*c23 + ay*s1*c23 + az*s23;
 
-                if (fabsf(tem4_1) < 1e-9 && fabsf(tem4_2) < 1e-9) {
+                if (std::fabs(tem4_1) < 1e-9 && std::fabs(tem4_2) < 1e-9) {
                     theta4[k] = theta5[k] = theta6[k] = 0.0f;
                     continue;
                 } else theta4[k] = atan2f(tem4_1, tem4_2);
@@ -258,7 +259,7 @@ namespace arm {
                 float tem5_1 = ax * (c1*c23*c4 + s1*s4) + ay * (s1*c23*c4 - c1*s4) + az * (s23*c4);
                 float tem5_2 = ax*c1*s23 + ay*s1*s23 - az*c23;
 
-                if (fabsf(tem5_1) < 1e-9f && fabsf(tem5_2) < 1e-9f) {
+                if (std::fabs(tem5_1) < 1e-9f && std::fabs(tem5_2) < 1e-9f) {
                     theta5[k] = 0.0f;
                 } else {
                     theta5[k] = atan2f(tem5_1, tem5_2);
@@ -272,7 +273,7 @@ namespace arm {
                             ny * ((s1*c23*c4 - c1*s4) * c5 - s1*s23*s5) +
                             nz * (s23*c4*c5 + c23*s5);
 
-                if (fabsf(tem6_1) < 1e-9f && fabsf(tem6_2) < 1e-9f) {
+                if (std::fabs(tem6_1) < 1e-9f && std::fabs(tem6_2) < 1e-9f) {
                     theta6[k] = 0.0f;
                 } else {
                     theta6[k] = atan2f(tem6_1, tem6_2);
@@ -320,7 +321,11 @@ namespace arm {
         void select_angle() {
             lst_clc_time[4] = bsp_time_get_us();
             if (validCount == 0) {
-                arm_theta.upd_angle = matrixf::zeros<6, 1>();
+                if (arm_theta.angle_upd && last_good_valid) {
+                    arm_theta.upd_angle = last_good_upd_angle;
+                } else {
+                    arm_theta.upd_angle = matrixf::zeros<6, 1>();
+                }
                 arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
                 return;
             }
@@ -337,6 +342,15 @@ namespace arm {
             if (!cur_q_valid) {
                 arm_theta.upd_angle = arm_theta.cur_angle.row(0).trans();
                 arm_theta.best_idx_t = best_idx_t = 0;
+                // 记录为“上一帧有效解”
+                bool ok = true;
+                for (uint8_t j = 0; j < 6; j++) {
+                    if (!std::isfinite(arm_theta.upd_angle[j][0])) { ok = false; break; }
+                }
+                if (arm_theta.angle_upd && ok) {
+                    last_good_upd_angle = arm_theta.upd_angle;
+                    last_good_valid = true;
+                }
                 arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
                 return;
             }
@@ -367,6 +381,17 @@ namespace arm {
             arm_theta.tmp = diff_tmp[best_idx];
             arm_theta.best_idx_t = best_idx_t = best_idx;
             arm_theta.upd_angle = arm_theta.cur_angle.row(best_idx).trans();
+
+            // 记录为“上一帧有效解”
+            bool ok = true;
+            for (uint8_t j = 0; j < 6; j++) {
+                if (!std::isfinite(arm_theta.upd_angle[j][0])) { ok = false; break; }
+            }
+            if (arm_theta.angle_upd && ok){
+                last_good_upd_angle = arm_theta.upd_angle;
+                last_good_valid = true;
+            }
+
             arm_theta.clc_time[4] = clc_time[4] = bsp_time_get_us() - lst_clc_time[4];
         }
 
@@ -377,6 +402,10 @@ namespace arm {
         const app_Arm_data_t *app_arm_get_data() {
             return &arm_theta;
         }
+
+        // 记录上一帧的有效逆解结果，用于解算失败回退
+        Matrixf<6, 1> last_good_upd_angle = matrixf::zeros<6, 1>();
+        bool last_good_valid = false;
 
         uint32_t clc_time[5] = {};
         uint32_t lst_clc_time[5] = {};

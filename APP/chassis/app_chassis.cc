@@ -123,24 +123,45 @@ void app_chassis_task(void *args) {
 	uint8_t send_count = 0;
 	int8_t save_state[2];
 	// 0: lift	1: right
+	static int8_t last_dir_L = 0;
+	static int8_t last_dir_R = 0;
+	static bool open_done_L = false;
+	static bool close_done_L = false;
+	static bool open_done_R = false;
+	static bool close_done_R = false;
+	constexpr double kSaveCurrent = 1000.0;
 
 	while(true) {
 
-		if(++ send_count == 10) {
-			send_count = 0;
-			send_msg_to_gimbal();
-		}
-
 		if (bsp_time_get_ms() - gimbal.timestamp < 100)
 		{
-			vx = gimbal()->vx;
-			vy = gimbal()->vy;
-			rotate = gimbal()->rotate;
+			if(gimbal()->vx < 700 && gimbal()->vy < 700 && gimbal()->rotate < 700) {
+				vx = gimbal()->vx * 1.67f;
+				vy = gimbal()->vy * 1.67f;
+				rotate = 3.0f * gimbal()->rotate;
+			}else {
+				vx = vy = rotate = 0;
+			}
 			save_state[0] = gimbal()->save_state[0];
 			save_state[1] = gimbal()->save_state[1];
 		}else {
 			vx = vy = rotate = 0;
 			save_state[0] = save_state[1] = false;
+		}
+
+		const int8_t dir_L = save_state[0];
+		const int8_t dir_R = save_state[1];
+
+		// lift/right 方向切换时，清空各自“到位完成”标记
+		if (dir_L != last_dir_L) {
+			last_dir_L = dir_L;
+			open_done_L = false;
+			close_done_L = false;
+		}
+		if (dir_R != last_dir_R) {
+			last_dir_R = dir_R;
+			open_done_R = false;
+			close_done_R = false;
 		}
 
 		auto theta = std::atan2(vy, vx), r = std::sqrt((vx * vx) + (vy * vy));
@@ -149,14 +170,35 @@ void app_chassis_task(void *args) {
 		vx = r * std::cos(theta), vy = r * std::sin(theta);
 
 		// lift
-		if(save_state[0] == 1) Save_L.update(1000);
-		else if(save_state[0] == -1) Save_L.update(-1000);
-		else Save_L.update(0);
+		if (dir_L == 1) {
+			if (open_done_L) Save_L.update(0);
+			else Save_L.update(kSaveCurrent);
+		} else if (dir_L == -1) {
+			if (close_done_L) Save_L.update(0);
+			else Save_L.update(-kSaveCurrent);
+		} else {
+			open_done_L = close_done_L = false;
+			Save_L.update(0);
+		}
 
 		// right
-		if(save_state[1] == 1) Save_R.update(1000);
-		else if(save_state[1] == -1) Save_R.update(-1000);
-		else Save_R.update(0);
+		if (dir_R == 1) {
+			if (open_done_R) Save_R.update(0);
+			else Save_R.update(kSaveCurrent);
+		} else if (dir_R == -1) {
+			if (close_done_R) Save_R.update(0);
+			else Save_R.update(-kSaveCurrent);
+		} else {
+			open_done_R = close_done_R = false;
+			Save_R.update(0);
+		}
+
+		const bool stall_L = (Save_L.error_code & APP_MOTOR_ERROR_STALL) != 0;
+		const bool stall_R = (Save_R.error_code & APP_MOTOR_ERROR_STALL) != 0;
+		if (!open_done_L && dir_L == 1 && stall_L) open_done_L = true;
+		if (!close_done_L && dir_L == -1 && stall_L) close_done_L = true;
+		if (!open_done_R && dir_R == 1 && stall_R) open_done_R = true;
+		if (!close_done_R && dir_R == -1 && stall_R) close_done_R = true;
 
 		motor_update(vx, vy, rotate);
 
@@ -168,11 +210,16 @@ void app_chassis_task(void *args) {
 			gimbal()->vy,
 			gimbal()->rotate,
 			gimbal()->save_state[0],
-			gimbal()->save_state[1]
+			gimbal()->save_state[1],
+			Save_L.current,
+			Save_R.current
 		);
 
 		OS::Task::SleepMilliseconds(1);
-		send_msg_to_gimbal();
+		// if(++ send_count == 10) {
+		// 	send_count = 0;
+		// 	send_msg_to_gimbal();
+		// }
 	}
 }
 
@@ -211,6 +258,14 @@ void app_chassis_init() {
 		std::make_unique <PID> (10.5, 0.08, 0.03, 16384, 1000),
 		nullptr
 	));
+
+	Save_L.use_stall_detect = true;
+	Save_R.use_stall_detect = true;
+	Save_L.stall_detector_time_threshold = 120;
+	Save_R.stall_detector_time_threshold = 120;
+	// 设置堵转阈值
+	Save_L.stall_detector_current_threshold = 2000.0f;
+	Save_R.stall_detector_current_threshold = 2000.0f;
 
 	// LU.relax(); LD.relax(); RU.relax(); RD.relax();
 

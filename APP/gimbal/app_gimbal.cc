@@ -98,38 +98,54 @@ static const float waiting_deg_q[6] = {
     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
 };
 
-static const float save1_deg_q[6] = {
-    211.12f*M_PI/180, -2.59f*M_PI/180, -36.64f*M_PI/180,
-    -57.21f*M_PI/180, 48.03f*M_PI/180, 39.86f*M_PI/180
+static const float save1_deg_st[6] = {
+    199.54f*M_PI/180, 3.24f*M_PI/180, -38.91f*M_PI/180,
+    -70.74f*M_PI/180, 63.09f*M_PI/180, 46.09f*M_PI/180
 };
 
-static const float save1_end1_deg_q[6] = {
-    189.0f*M_PI/180, 23.09f*M_PI/180, -31.01f*M_PI/180,
-    -83.96f*M_PI/180, 79.35f*M_PI/180, 32.14f*M_PI/180
+static const float save1_deg_mid[6] = {
+    191.36f*M_PI/180, 23.70f*M_PI/180, -33.82f*M_PI/180,
+    -95.02f*M_PI/180, 80.84f*M_PI/180, 32.09f*M_PI/180
 };
 
-static const float save1_end2_deg_q[6] = {
-    153.24f*M_PI/180, 19.85f*M_PI/180, -32.51f*M_PI/180,
-    -107.15f*M_PI/180, 85.29f*M_PI/180, 32.54f*M_PI/180
+static const float save1_deg_end[6] = {
+    162.24f*M_PI/180, 19.70f*M_PI/180, -35.39f*M_PI/180,
+    -106.65f*M_PI/180, 82.29f*M_PI/180, 38.14f*M_PI/180
 };
 
-static const float save2_deg_q[6] = {
-    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+static const float save2_deg_st[6] = {
+    -186.82f*M_PI/180, 3.37f*M_PI/180, -40.81f*M_PI/180,
+    76.01f*M_PI/180, 64.73f*M_PI/180, -45.86f*M_PI/180
 };
+
+static const float save2_deg_mid[6] = {
+    -171.23f*M_PI/180, 16.99f*M_PI/180, -40.99f*M_PI/180,
+    95.06f*M_PI/180, 74.65f*M_PI/180, -31.04f*M_PI/180
+};
+
+static const float save2_deg_end[6] = {
+    -135.13f*M_PI/180, 16.95f*M_PI/180, -44.46f*M_PI/180,
+    109.75f*M_PI/180, 82.29f*M_PI/180, -30.87f*M_PI/180
+};
+
+// static const float save2_deg_end_2[6] = {
+//     -135.13f*M_PI/180, 16.95f*M_PI/180, -44.46f*M_PI/180,
+//     109.75f*M_PI/180, 82.29f*M_PI/180, -30.87f*M_PI/180
+// };
 
 static arm::arm_parm g_arm_parm = {
     .J_parm = {
             { .use_mit_pd = false,
-                    .joint_pos_pid = {7, 0.2f, 0, 3, 0},
-                    .joint_speed_pid = {1.5, 2.5f/1000.f, 0, 5, 3},
-                    .Kp = 0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .joint_pos_pid = {6, 0.08f, 0, 3, 0},
+                    .joint_speed_pid = {1.3, 1.0f/1000.f, 0, 5, 3},
+                    .Kp = 0.0f, .Kd = 0.5f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = false,
-                    .joint_pos_pid = {15, 0, 0, 1, 0},
-                    .joint_speed_pid = {15, 4.5f/1000.f, 0.5f, 26, 10},
+                    .joint_pos_pid = {17, 0, 0, 1, 0},
+                    .joint_speed_pid = {16, 2.5f/1000.f, 0.5f, 26, 10},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 200.0f, .tor_min = -200.0f },
             { .use_mit_pd = false,
-                    .joint_pos_pid = {13, 0.1f, 0, 1, 0},
-                    .joint_speed_pid = {12, 5.0f/1000.f, 0, 16, 6},
+                    .joint_pos_pid = {14, 0, 0, 1, 0},
+                    .joint_speed_pid = {13, 3.0f/1000.f, 0, 16, 6},
                     .Kp =  0.0f, .Kd = 0.0f, .speed_max = 0.0f, .tor_max = 54.0f, .tor_min = -54.0f },
             { .use_mit_pd = false,
                     .joint_pos_pid = {11, 0, 0, 6, 0},
@@ -218,8 +234,8 @@ static Matrixf<6, 1> get_clc_angle(const arm::app_Arm_data_t* data_) {
     }else return g_arm_controller.get_waiting_deg();
 }
 
-float chassis_vx = 0, chassis_vy = 0;
-float chassis_rotate = 0;
+int16_t chassis_vx = 0, chassis_vy = 0;
+int16_t chassis_rotate = 0;
 // 0: lift	1: right
 int8_t chassis_save_state[2] = {};
 
@@ -256,6 +272,7 @@ void app_gimbal_task(void *args) {
     bool use_delta = false;
     bool tmp_use = false;
     bool lpf_inited = false;
+    uint8_t send_count = 0;
     float pos[3], rpy[3];
     float j0_rc_angle = {};
     float lst_pos[3] = {}, lst_rpy[3] = {};
@@ -267,15 +284,19 @@ void app_gimbal_task(void *args) {
     while(true) {
 
         if (bsp_time_get_ms() - rc->timestamp < 100) {
-            chassis_vx = rc->rc_l[0] * 1.67f;
-            chassis_vy = rc->rc_l[1] * 1.67f;
-            chassis_rotate = 3.0f * rc->reserved;
-            // chassis_save_state[0] = chassis_save_state[1] = rc->s_l;
+            chassis_vx = rc->rc_l[0];
+            chassis_vy = rc->rc_l[1];
+            chassis_rotate = rc->reserved;
+            // chassis_save_state[0] = chassis_save_state[1] = rc->s_r;
             j0_rc_angle -= rc->rc_r[0] * (M_PI / 660.0f) * 0.0005f;
             j0_rc_angle = math::limit(j0_rc_angle,
                 arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].min_val,
                 arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].max_val);
             //末端状态
+            // if(rc->s_r == 1) trigger_left = true;
+            // else trigger_left = false;
+            // if(rc->s_r == -1) trigger_right = true;
+            // else trigger_right = false;
             if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
             else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
             else arm_out.clamp_state = arm::ClampState::SetZero;
@@ -298,9 +319,9 @@ void app_gimbal_task(void *args) {
         if(bsp_time_get_ms() - referee->timestamp < 200) {
             if(bsp_time_get_ms() - referee->custom_controller_timestamp < 200) {
                 float pos_raw[3], rpy_raw[3];
-                pos_raw[0] = -referee->custom_controller.pos_data[0]*3.0f + 0.420f;
+                pos_raw[0] = -referee->custom_controller.pos_data[0]*3.0f + 0.550f;
                 pos_raw[1] = -referee->custom_controller.pos_data[1]*3.0f;
-                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*4.0f + 0.550f;
+                pos_raw[2] = (referee->custom_controller.pos_data[2] + 0.233f)*4.0f + 0.610f;
 
                 // rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
                 // rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
@@ -342,31 +363,29 @@ void app_gimbal_task(void *args) {
             }
         }
         arm_out.g_tor_ref = arm_clc->upd_tar;
-        arm_out.g_tor_ref[2][0] *= 1.08,
         arm_out.g_tor_ref[1][0] *= -1.0, arm_out.g_tor_ref[4][0] *= 1.1;
+        // if(use_delta) {
+        //     // pos_ref_tmp = tmp_pos;
+        //     arm_out.pos_ref = tmp_pos;
+        //     // arm_out.use_Tline = true;
+        //     // arm_out.pos_Tline = Matrixf<6, 1>(const_cast<float*>(start_deg_q));
+        //     // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_end1_deg_q));
+        // // }else if(tmp_use) {
+        //     // arm_out.use_Tline = false;
+        //     // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_end2_deg_q));
+        //     // arm_out.pos_ref = g_arm_controller.get_waiting_deg();
+        // }else {
+        //     arm_out.pos_ref = g_arm_controller.get_waiting_deg();
+        //     // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_deg_q));
+        // }
         if(use_delta) {
-            // pos_ref_tmp = tmp_pos;
             arm_out.pos_ref = tmp_pos;
-            // arm_out.use_Tline = true;
-            // arm_out.pos_Tline = Matrixf<6, 1>(const_cast<float*>(start_deg_q));
-            // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_end1_deg_q));
-        // }else if(tmp_use) {
-            // arm_out.use_Tline = false;
-            // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_end2_deg_q));
-            // arm_out.pos_ref = g_arm_controller.get_waiting_deg();
         }else {
             arm_out.pos_ref = g_arm_controller.get_waiting_deg();
-            // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_deg_q));
         }
         g_arm_controller.update(arm_out);
 
         app_msg_vofa_send(E_UART_DEBUG,
-            // pos_ref_tmp[0][0] * 180/M_PI,
-            // pos_ref_tmp[1][0] * 180/M_PI,
-            // pos_ref_tmp[2][0] * 180/M_PI,
-            // pos_ref_tmp[3][0] * 180/M_PI,
-            // pos_ref_tmp[4][0] * 180/M_PI,
-            // pos_ref_tmp[5][0] * 180/M_PI,
             // arm_out.pos_ref[0][0] * 180/M_PI,
             // arm_out.pos_ref[1][0] * 180/M_PI,
             // arm_out.pos_ref[2][0] * 180/M_PI,
@@ -393,16 +412,40 @@ void app_gimbal_task(void *args) {
             // arm_data->vel[0][0],
             // g_arm_controller.joint(arm::ARM_JOINT_0)->status.torque,
             // g_arm_controller.joint(arm::ARM_JOINT_0)->status.vel
+            pos[0] * 1000,
+            pos[1] * 1000,
+            pos[2] * 1000,
+            rpy[0] * 180/M_PI,
+            rpy[1] * 180/M_PI,
+            rpy[2] * 180/M_PI,
+            // arm_clc->upd_angle[0][0] * 180/M_PI,
+            // arm_clc->upd_angle[1][0] * 180/M_PI,
+            // arm_clc->upd_angle[2][0] * 180/M_PI,
+            // arm_clc->upd_angle[3][0] * 180/M_PI,
+            // arm_clc->upd_angle[4][0] * 180/M_PI,
+            // arm_clc->upd_angle[5][0] * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_0)->status.pos * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_1)->status.pos * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_2)->status.pos * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_3)->status.pos * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_4)->status.pos * 180/M_PI,
             g_arm_controller.joint(arm::ARM_JOINT_5)->status.pos * 180/M_PI
+            // tmp_pos[0][0] * 180/M_PI,
+            // tmp_pos[1][0] * 180/M_PI,
+            // tmp_pos[2][0] * 180/M_PI,
+            // tmp_pos[3][0] * 180/M_PI,
+            // tmp_pos[4][0] * 180/M_PI,
+            // tmp_pos[5][0] * 180/M_PI
+            // arm_clc->T_arm_end[0][3] * 1000,
+            // arm_clc->T_arm_end[1][3] * 1000,
+            // arm_clc->T_arm_end[2][3] * 1000
         );
 
         OS::Task::SleepMilliseconds(1);
-        send_msg_to_chassis();
+        if(++ send_count == 10) {
+        	send_count = 0;
+        	send_msg_to_chassis();
+        }
     }
 }
 
