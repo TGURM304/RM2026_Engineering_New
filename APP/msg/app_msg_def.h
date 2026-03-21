@@ -13,7 +13,8 @@ struct app_msg_gimbal_to_chassis {
 } __attribute__((packed));
 
 struct app_msg_chassis_to_gimbal {
-    uint16_t d_msg, e_msg;
+    bool open_done_L, close_done_L;
+    bool open_done_R, close_done_R;
 
 } __attribute__((packed));
 

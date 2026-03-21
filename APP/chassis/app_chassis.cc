@@ -101,14 +101,20 @@ void motor_update(double vx_t, double vy_t, double r_t) {
 	LU.update(w1), RU.update(w2), RD.update(w3), LD.update(w4);
 }
 
+static bool open_done_L = false;
+static bool close_done_L = false;
+static bool open_done_R = false;
+static bool close_done_R = false;
 //双板通信
 //收
 app_msg_can_receiver <app_msg_gimbal_to_chassis> gimbal(E_CAN3, 0x066);
 //发
 void send_msg_to_gimbal() {
 	app_msg_chassis_to_gimbal pkg = {
-		.d_msg = 114,
-		.e_msg = 514
+		.open_done_L = open_done_L,
+		.close_done_L = close_done_L,
+		.open_done_R = open_done_R,
+		.close_done_R = close_done_R
 	};
 	app_msg_can_send(E_CAN3, 0x033, pkg);
 }
@@ -125,10 +131,6 @@ void app_chassis_task(void *args) {
 	// 0: lift	1: right
 	static int8_t last_dir_L = 0;
 	static int8_t last_dir_R = 0;
-	static bool open_done_L = false;
-	static bool close_done_L = false;
-	static bool open_done_R = false;
-	static bool close_done_R = false;
 	constexpr double kSaveCurrent = 1000.0;
 
 	while(true) {
@@ -216,10 +218,10 @@ void app_chassis_task(void *args) {
 		);
 
 		OS::Task::SleepMilliseconds(1);
-		// if(++ send_count == 10) {
-		// 	send_count = 0;
-		// 	send_msg_to_gimbal();
-		// }
+		if(++ send_count == 10) {
+			send_count = 0;
+			send_msg_to_gimbal();
+		}
 	}
 }
 
