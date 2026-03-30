@@ -23,6 +23,7 @@ extern "C" {
 
 void app_gimbal_init();
 void app_gimbal_task(void *args);
+bool app_gimbal_ready();
 const gimbal_arm_t *gimbal_arm_data();
 
 #ifdef __cplusplus

@@ -91,13 +91,11 @@ auto gimbal_data = gimbal_arm_data();
 void app_arm_task(void *args) {
     // Wait for system init.
     while(!app_sys_ready()) OS::Task::SleepMilliseconds(10);
+    while(!app_gimbal_ready())
+        OS::Task::SleepMilliseconds(10);
 
     OS::Task::SleepMilliseconds(100);
 
-    // float q_data[6] = {
-    //     50.2f * M_PI / 180, 40.5f * M_PI / 180, 112.17f * M_PI / 180,
-    //     40.12f * M_PI / 180, 56.21f * M_PI / 180, 70.7f * M_PI / 180
-    // };
     float q_data[6] = {0, 0, 0, 0, 0, 0};
     float q_d[6] = {0, 0, 0, 0, 0, 0};
     float q_dd[6] = {0, 0, 0, 0, 0, 0};

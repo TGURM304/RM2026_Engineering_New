@@ -11,7 +11,7 @@ num = 100000;   % 采样点数
 %a3 = -0.0785; % 未知
 %d2 = 0.0285; % 未知
 %d4 = 0.22571;
-a2 = 0.390;
+a2 = 0.430;
 a3 = -0.0785; % 未知
 d2 = 0.0227; % 未知
 d4 = 0.27505;
@@ -27,7 +27,7 @@ L1.qlim = [-240 245]*pi/180;
 L2.qlim = [  27 140]*pi/180;
 L3.qlim = [-137  13]*pi/180;
 L4.qlim = [-175 115]*pi/180;
-L5.qlim = [-85 87]*pi/180;
+L5.qlim = [-114 114]*pi/180;
 L6.qlim = [-180 180]*pi/180;
 
 IRB4600 = SerialLink([L1 L2 L3 L4 L5 L6],'name','IRB4600');
@@ -89,3 +89,28 @@ plot(shp,'FaceAlpha',0.15,'EdgeColor','none','FaceColor',[0 0.5 1]);
 title('IRB4600 工作空间（AlphaShape包络）')
 
 hold off
+
+%% 9. ===== 绘制目标点 =====
+target_point1 = [-0.228, -0.110, 0.330];
+target_point2 = [-0.228,  0.110, 0.330];
+
+hold on;
+
+% 点1（红色大点）
+plot3(target_point1(1), target_point1(2), target_point1(3), ...
+    'ro', 'MarkerSize', 10, 'LineWidth', 2);
+
+% 点2（绿色大点）
+plot3(target_point2(1), target_point2(2), target_point2(3), ...
+    'go', 'MarkerSize', 10, 'LineWidth', 2);
+
+% 标注
+text(target_point1(1), target_point1(2), target_point1(3), ...
+    '  P1', 'Color','r', 'FontSize',12);
+
+text(target_point2(1), target_point2(2), target_point2(3), ...
+    '  P2', 'Color','g', 'FontSize',12);
+
+legend('工作空间点云','AlphaShape包络','Target P1','Target P2');
+
+hold off;

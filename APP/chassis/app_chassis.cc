@@ -124,13 +124,14 @@ void app_chassis_task(void *args) {
 	// Wait for system init.
 	while(!app_sys_ready()) OS::Task::SleepMilliseconds(10);
 
+	OS::Task::SleepMilliseconds(3000);
+
 	gimbal.init();
 	// bsp_uart_set_callback(E_UART_DEBUG, set_target);
 	uint8_t send_count = 0;
 	int8_t save_state[2];
 	// 0: lift	1: right
-	static int8_t last_dir_L = 0;
-	static int8_t last_dir_R = 0;
+	int8_t last_dir_L = 0, last_dir_R = 0;
 	constexpr double kSaveCurrent = 1000.0;
 
 	while(true) {
@@ -159,11 +160,28 @@ void app_chassis_task(void *args) {
 			last_dir_L = dir_L;
 			open_done_L = false;
 			close_done_L = false;
+
+			//未测试
+			// 换向时清堵转标志（仅底盘侧），避免上一方向残留 stall 误判另一方向 close/open 到位
+			if (Save_L.error_code & APP_MOTOR_ERROR_STALL) {
+				Save_L.error_code ^= APP_MOTOR_ERROR_STALL;
+				Save_L.activate(true);
+			}
+			//未测试
+
 		}
 		if (dir_R != last_dir_R) {
 			last_dir_R = dir_R;
 			open_done_R = false;
 			close_done_R = false;
+
+			//未测试
+			if (Save_R.error_code & APP_MOTOR_ERROR_STALL) {
+				Save_R.error_code ^= APP_MOTOR_ERROR_STALL;
+				Save_R.activate(true);
+			}
+			//未测试
+			
 		}
 
 		auto theta = std::atan2(vy, vx), r = std::sqrt((vx * vx) + (vy * vy));
@@ -208,13 +226,17 @@ void app_chassis_task(void *args) {
 			vx,
 			vy,
 			rotate,
-			gimbal()->vx,
-			gimbal()->vy,
-			gimbal()->rotate,
+			// gimbal()->vx,
+			// gimbal()->vy,
+			// gimbal()->rotate,
 			gimbal()->save_state[0],
 			gimbal()->save_state[1],
 			Save_L.current,
-			Save_R.current
+			Save_R.current,
+			open_done_L,
+			open_done_R,
+			close_done_L,
+			close_done_R
 		);
 
 		OS::Task::SleepMilliseconds(1);
@@ -263,11 +285,11 @@ void app_chassis_init() {
 
 	Save_L.use_stall_detect = true;
 	Save_R.use_stall_detect = true;
-	Save_L.stall_detector_time_threshold = 120;
-	Save_R.stall_detector_time_threshold = 120;
+	Save_L.stall_detector_time_threshold = 500;
+	Save_R.stall_detector_time_threshold = 500;
 	// 设置堵转阈值
-	Save_L.stall_detector_current_threshold = 2000.0f;
-	Save_R.stall_detector_current_threshold = 2000.0f;
+	Save_L.stall_detector_current_threshold = 4000.0f;
+	Save_R.stall_detector_current_threshold = 4000.0f;
 
 	// LU.relax(); LD.relax(); RU.relax(); RD.relax();
 
