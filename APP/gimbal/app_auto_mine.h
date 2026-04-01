@@ -18,7 +18,7 @@ struct SaveFeedback {
     bool open_done_R = false, close_done_R = false;
 };
 
-// 三段 q + clamp_states[3]/save_dirs[3]；wait_save_done[i] 控制第 i 段 Do* 是否等存矿标志位（见 segmentDoOk）
+// 三段 q + clamp_states[3]；存矿槽建议由底盘独立控制；save_dirs/wait_save_done 仅保留兼容
 class AutoMineFsm {
     public:
         enum class Step : uint8_t {
@@ -57,11 +57,11 @@ class AutoMineFsm {
                 arm::ClampState::Open,
                 arm::ClampState::Open,
             };
-            // save_index 通道：1 开到位 / -1 关到位 / 0 停
-            int8_t save_dirs[3] = {-1, 1, 1};
+            // 存矿槽由底盘自行「开到堵转后保持」；云台不再发开/关指令，也不等底盘到位标志
+            int8_t save_dirs[3] = {0, 0, 0};
 
             // 各段 Do* 是否等待底盘存矿到位标志（false 则该段仅靠 after_reached_delay_ms）
-            bool wait_save_done[3] = {true, true, true};
+            bool wait_save_done[3] = {false, false, false};
 
             // 单步最大停留时间（ms），超时则退出 FSM，避免未到位永远卡在 To* / Return 等；0 表示关闭
             uint32_t step_timeout_ms = 0;
@@ -255,7 +255,9 @@ class AutoMineFsm {
                 float diff = cur_q[i] - target_q[i];
                 // 关节 3/5 在控制器里开启了 use_sum_angle，cur_q 可能与 target 存在 2*pi 等价偏差
                 if (i == 3 || i == 5) diff -= std::round(diff / two_pi) * two_pi;
-                if (std::fabs(diff) > cfg_.pos_eps_rad) return false;
+                // J5（索引 5）控制/传动误差较大，一键存矿到位判定放宽为 2 倍
+                const float eps = (i == 5) ? (3.0f * cfg_.pos_eps_rad) : cfg_.pos_eps_rad;
+                if (std::fabs(diff) > eps) return false;
             }
             return true;
         }

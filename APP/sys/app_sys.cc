@@ -110,6 +110,7 @@ void bsp_hw_init() {
     bsp_can_init(E_CAN3, &hfdcan3);
     bsp_uart_init(E_UART_DEBUG, &huart10);
     bsp_uart_init(E_UART_REFEREE, &huart1);
+    HAL_GPIO_WritePin(GPIOC, POWER_5V_Pin, GPIO_PIN_SET);
 }
 
 // 放一些系统级任务

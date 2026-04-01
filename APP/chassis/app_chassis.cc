@@ -133,6 +133,8 @@ void app_chassis_task(void *args) {
 	// 0: lift	1: right
 	int8_t last_dir_L = 0, last_dir_R = 0;
 	constexpr double kSaveCurrent = 1000.0;
+	// true = 忽略云台 save_state, false = 下面沿用原开/关逻辑
+	static constexpr bool k_chassis_save_slot_hold_open = true;
 
 	while(true) {
 
@@ -158,30 +160,32 @@ void app_chassis_task(void *args) {
 		// lift/right 方向切换时，清空各自“到位完成”标记
 		if (dir_L != last_dir_L) {
 			last_dir_L = dir_L;
-			open_done_L = false;
-			close_done_L = false;
+			if (!k_chassis_save_slot_hold_open) {
+				open_done_L = false;
+				close_done_L = false;
 
-			//未测试
-			// 换向时清堵转标志（仅底盘侧），避免上一方向残留 stall 误判另一方向 close/open 到位
-			if (Save_L.error_code & APP_MOTOR_ERROR_STALL) {
-				Save_L.error_code ^= APP_MOTOR_ERROR_STALL;
-				Save_L.activate(true);
+				//未测试
+				// 换向时清堵转标志（仅底盘侧），避免上一方向残留 stall 误判另一方向 close/open 到位
+				if (Save_L.error_code & APP_MOTOR_ERROR_STALL) {
+					Save_L.error_code ^= APP_MOTOR_ERROR_STALL;
+					Save_L.activate(true);
+				}
+				//未测试
 			}
-			//未测试
-
 		}
 		if (dir_R != last_dir_R) {
 			last_dir_R = dir_R;
-			open_done_R = false;
-			close_done_R = false;
+			if (!k_chassis_save_slot_hold_open) {
+				open_done_R = false;
+				close_done_R = false;
 
-			//未测试
-			if (Save_R.error_code & APP_MOTOR_ERROR_STALL) {
-				Save_R.error_code ^= APP_MOTOR_ERROR_STALL;
-				Save_R.activate(true);
+				//未测试
+				if (Save_R.error_code & APP_MOTOR_ERROR_STALL) {
+					Save_R.error_code ^= APP_MOTOR_ERROR_STALL;
+					Save_R.activate(true);
+				}
+				//未测试
 			}
-			//未测试
-			
 		}
 
 		auto theta = std::atan2(vy, vx), r = std::sqrt((vx * vx) + (vy * vy));
@@ -189,36 +193,48 @@ void app_chassis_task(void *args) {
 		// theta -= ins->yaw / 180 * M_PI;//底盘陀螺仪的小陀螺结算
 		vx = r * std::cos(theta), vy = r * std::sin(theta);
 
-		// lift
-		if (dir_L == 1) {
+		if (k_chassis_save_slot_hold_open) {
+			// 保持开：开到堵转后停，不关回
 			if (open_done_L) Save_L.update(0);
 			else Save_L.update(kSaveCurrent);
-		} else if (dir_L == -1) {
-			if (close_done_L) Save_L.update(0);
-			else Save_L.update(-kSaveCurrent);
-		} else {
-			open_done_L = close_done_L = false;
-			Save_L.update(0);
-		}
-
-		// right
-		if (dir_R == 1) {
 			if (open_done_R) Save_R.update(0);
 			else Save_R.update(kSaveCurrent);
-		} else if (dir_R == -1) {
-			if (close_done_R) Save_R.update(0);
-			else Save_R.update(-kSaveCurrent);
+			const bool stall_L = (Save_L.error_code & APP_MOTOR_ERROR_STALL) != 0;
+			const bool stall_R = (Save_R.error_code & APP_MOTOR_ERROR_STALL) != 0;
+			if (!open_done_L && stall_L) open_done_L = true;
+			if (!open_done_R && stall_R) open_done_R = true;
 		} else {
-			open_done_R = close_done_R = false;
-			Save_R.update(0);
-		}
+			// lift
+			if (dir_L == 1) {
+				if (open_done_L) Save_L.update(0);
+				else Save_L.update(kSaveCurrent);
+			} else if (dir_L == -1) {
+				if (close_done_L) Save_L.update(0);
+				else Save_L.update(-kSaveCurrent);
+			} else {
+				open_done_L = close_done_L = false;
+				Save_L.update(0);
+			}
 
-		const bool stall_L = (Save_L.error_code & APP_MOTOR_ERROR_STALL) != 0;
-		const bool stall_R = (Save_R.error_code & APP_MOTOR_ERROR_STALL) != 0;
-		if (!open_done_L && dir_L == 1 && stall_L) open_done_L = true;
-		if (!close_done_L && dir_L == -1 && stall_L) close_done_L = true;
-		if (!open_done_R && dir_R == 1 && stall_R) open_done_R = true;
-		if (!close_done_R && dir_R == -1 && stall_R) close_done_R = true;
+			// right
+			if (dir_R == 1) {
+				if (open_done_R) Save_R.update(0);
+				else Save_R.update(kSaveCurrent);
+			} else if (dir_R == -1) {
+				if (close_done_R) Save_R.update(0);
+				else Save_R.update(-kSaveCurrent);
+			} else {
+				open_done_R = close_done_R = false;
+				Save_R.update(0);
+			}
+
+			const bool stall_L = (Save_L.error_code & APP_MOTOR_ERROR_STALL) != 0;
+			const bool stall_R = (Save_R.error_code & APP_MOTOR_ERROR_STALL) != 0;
+			if (!open_done_L && dir_L == 1 && stall_L) open_done_L = true;
+			if (!close_done_L && dir_L == -1 && stall_L) close_done_L = true;
+			if (!open_done_R && dir_R == 1 && stall_R) open_done_R = true;
+			if (!close_done_R && dir_R == -1 && stall_R) close_done_R = true;
+		}
 
 		motor_update(vx, vy, rotate);
 

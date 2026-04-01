@@ -68,13 +68,13 @@ static void arm_links_init() {
 
     Matrixf<3, 1> pc1, pc2, pc3, pc4, pc5, pc6;
     pc1[0][0] =  0.00075f; pc1[1][0] =  0.00362f; pc1[2][0] =  0.08834f;
-    pc2[0][0] =  0.18728f; pc2[1][0] = -0.00001f; pc2[2][0] = -0.05947f;
+    pc2[0][0] =  0.20800f; pc2[1][0] = -0.00001f; pc2[2][0] = -0.05947f;
     pc3[0][0] = -0.01792f; pc3[1][0] = -0.00668f; pc3[2][0] =  0.00728f;
     pc4[0][0] =  0.00044f; pc4[1][0] =  0.00614f; pc4[2][0] =  0.05728f;
     pc5[0][0] = -0.00104f; pc5[1][0] = -0.02705f; pc5[2][0] = -0.00226f;
-    pc6[0][0] =  0.00001f; pc6[1][0] =  0.0f;     pc6[2][0] =  0.04709f;
+    pc6[0][0] = -0.00002f; pc6[1][0] = -0.00001f; pc6[2][0] =  0.05231f;
 
-    float m1 = 1.62106f, m2 = 0.9753f + 0.3f, m3 = 2.44157f + 0.4f, m4 = 0.76625f, m5 = 0.45733f, m6 = 0.55557f;
+    float m1 = 1.62106f, m2 = 0.9753f + 0.3f, m3 = 2.44157f + 0.4f, m4 = 0.76625f, m5 = 0.45733f, m6 = 0.56857f;
 
     g_arm_links[0] = arm::Link(0.0f,   0.0f,    0.0f,   0.0f, arm::Revolute, 0.0f,   arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].min_val, arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_0].max_val, m1, pc1, I1);
     g_arm_links[1] = arm::Link(0.0f,   M_PI_2,  arm_d2, 0.0f, arm::Revolute, 0.0f,   arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_1].min_val, arm::ARM_JOINT_LIMITS.J[arm::ARM_JOINT_1].max_val, m2, pc2, I2);

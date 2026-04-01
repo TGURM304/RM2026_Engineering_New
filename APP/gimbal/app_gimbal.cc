@@ -14,6 +14,7 @@
 #include "app_ins.h"
 #include "app_motor.h"
 #include "app_msg_def.h"
+#include "app_servo.h"
 #include "app_sys.h"
 #include "alg_filter.h"
 #include "dev_motor_dji.h"
@@ -100,33 +101,33 @@ static const float waiting_deg_q[6] = {
 };
 
 static const float save1_deg_st[6] = {
-    199.54f*M_PI/180, 3.24f*M_PI/180, -38.91f*M_PI/180,
-    -70.74f*M_PI/180, 63.09f*M_PI/180, 46.09f*M_PI/180
+    192.61f*M_PI/180, 13.45f*M_PI/180, -31.75f*M_PI/180,
+    -92.66f*M_PI/180, 92.99f*M_PI/180, 44.12f*M_PI/180
 };
 
 static const float save1_deg_mid[6] = {
-    191.36f*M_PI/180, 23.70f*M_PI/180, -33.82f*M_PI/180,
-    -95.02f*M_PI/180, 80.84f*M_PI/180, 32.09f*M_PI/180
+    192.01f*M_PI/180, 37.32f*M_PI/180, -36.16f*M_PI/180,
+    -99.17f*M_PI/180, 93.02f*M_PI/180, 13.74f*M_PI/180
 };
 
 static const float save1_deg_end[6] = {
-    162.24f*M_PI/180, 19.70f*M_PI/180, -35.39f*M_PI/180,
-    -106.65f*M_PI/180, 82.29f*M_PI/180, 38.14f*M_PI/180
+    154.69f*M_PI/180, 27.15f*M_PI/180, -32.84f*M_PI/180,
+    -118.58f*M_PI/180, 94.87f*M_PI/180, 18.63f*M_PI/180
 };
 
 static const float save2_deg_st[6] = {
-    -186.82f*M_PI/180, 3.37f*M_PI/180, -40.81f*M_PI/180,
-    76.01f*M_PI/180, 64.73f*M_PI/180, -45.86f*M_PI/180
+    -187.13f*M_PI/180, 3.74f*M_PI/180, -44.43f*M_PI/180,
+    67.48f*M_PI/180, 67.77f*M_PI/180, -39.44f*M_PI/180
 };
 
 static const float save2_deg_mid[6] = {
-    -171.23f*M_PI/180, 16.99f*M_PI/180, -40.99f*M_PI/180,
-    95.06f*M_PI/180, 74.65f*M_PI/180, -31.04f*M_PI/180
+    -177.01f*M_PI/180, 37.32f*M_PI/180, -33.50f*M_PI/180,
+    117.30f*M_PI/180, 95.79f*M_PI/180, -20.38f*M_PI/180
 };
 
 static const float save2_deg_end[6] = {
-    -135.13f*M_PI/180, 16.95f*M_PI/180, -44.46f*M_PI/180,
-    109.75f*M_PI/180, 82.29f*M_PI/180, -30.87f*M_PI/180
+    -150.43f*M_PI/180, 6.45f*M_PI/180, -30.47f*M_PI/180,
+    140.66f*M_PI/180, 73.77f*M_PI/180, -50.11f*M_PI/180
 };
 
 // static const float save2_deg_end_2[6] = {
@@ -141,8 +142,9 @@ static mine::AutoMineFsm::Config left_mine_cfg = {
     .q_end = Matrixf<6, 1>(const_cast<float*>(save1_deg_end)),
     .save_index = 0,
     .clamp_states = {arm::ClampState::Close, arm::ClampState::Open, arm::ClampState::Open},
-    .save_dirs = {-1, 1, 1},
-    .step_timeout_ms = 20000, // 单步过久（未到位/底盘反馈卡死）则退出，避免永久卡在 ToMid/回预姿态等
+    .save_dirs = {0, 0, 0},
+    .wait_save_done = {false, false, false},
+    .step_timeout_ms = 20000, // 单步过久（未到位）则退出，避免永久卡在 ToMid/回预姿态等
 };
 static mine::AutoMineFsm::Config right_mine_cfg = {
     .q_st = Matrixf<6, 1>(const_cast<float*>(save2_deg_st)),
@@ -150,11 +152,15 @@ static mine::AutoMineFsm::Config right_mine_cfg = {
     .q_end = Matrixf<6, 1>(const_cast<float*>(save2_deg_end)),
     .save_index = 1,
     .clamp_states = {arm::ClampState::Close, arm::ClampState::Open, arm::ClampState::Open},
-    .save_dirs = {-1, 1, 1},
+    .save_dirs = {0, 0, 0},
+    .wait_save_done = {false, false, false},
     .step_timeout_ms = 20000,
 };
 static mine::AutoMineFsm left_mine_fsm(left_mine_cfg);
 static mine::AutoMineFsm right_mine_fsm(right_mine_cfg);
+
+static servo::Servo servo_yaw;
+static servo::Servo servo_pitch;
 
 static arm::arm_parm g_arm_parm = {
     .J_parm = {
@@ -177,11 +183,11 @@ static arm::arm_parm g_arm_parm = {
             { .use_mit_pd = true,
                     .joint_pos_pid = {1, 0, 0, 1, 0},
                     .joint_speed_pid = {2, 0.02f/1000.f, 0.02f, 5, 3},
-                    .Kp =  10.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .Kp =  25.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
-                    .Kp =  7.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
+                    .Kp =  10.0f, .Kd = 1.0f, .speed_max = 0.0f, .tor_max = 10.0f, .tor_min = -10.0f },
             { .use_mit_pd = true,
                     .joint_pos_pid = {0, 0, 0, 0, 0},
                     .joint_speed_pid = {0, 0, 0, 0, 0},
@@ -325,6 +331,7 @@ void app_gimbal_task(void *args) {
             else trigger_left = false;
             if(rc->s_r == -1) trigger_right = true;
             else trigger_right = false;
+            arm_out.clamp_state = arm::ClampState::Close;
             // if(rc->s_r == 1) arm_out.clamp_state = arm::ClampState::Close;
             // else if(rc->s_r == -1) arm_out.clamp_state = arm::ClampState::Open;
             // else arm_out.clamp_state = arm::ClampState::SetZero;
@@ -339,7 +346,7 @@ void app_gimbal_task(void *args) {
             chassis_vx = chassis_vy = chassis_rotate = 0.0f;
             chassis_save_state[0] = chassis_save_state[1] = false;
             j0_rc_angle = 0.0f;
-            arm_out.clamp_state = arm::ClampState::Close;
+            arm_out.clamp_state = arm::ClampState::Open;
             gimbal_arm.angle_upd = false;
             use_delta = false;
             trigger_left = trigger_right = false;
@@ -473,6 +480,9 @@ void app_gimbal_task(void *args) {
 
         g_arm_controller.update(arm_out);
 
+        servo_yaw.set_angle(180.0f);
+        servo_pitch.set_angle(95.0f);
+
         app_msg_vofa_send(E_UART_DEBUG,
             // gimbal_arm.tar_xyz[0] * 1000,
             // gimbal_arm.tar_xyz[1] * 1000,
@@ -494,42 +504,31 @@ void app_gimbal_task(void *args) {
             // arm_data->vel[0][0],
             // g_arm_controller.joint(arm::ARM_JOINT_0)->status.torque,
             // g_arm_controller.joint(arm::ARM_JOINT_0)->status.vel
-            // pos[0] * 1000,
-            // pos[1] * 1000,
-            // pos[2] * 1000,
-            // rpy[0] * 180/M_PI,
-            // rpy[1] * 180/M_PI,
-            // rpy[2] * 180/M_PI,
-            rc->s_l,
-            rc->s_r,
-            rc->rc_l[0],
-            rc->rc_l[1],
-            rc->timestamp,
-            chassis_vx,
-            chassis_vy,
-            chassis_rotate,
-            arm_out.pos_ref[0][0] * 180/M_PI,
-            arm_out.pos_ref[1][0] * 180/M_PI,
-            arm_out.pos_ref[2][0] * 180/M_PI,
-            arm_out.pos_ref[3][0] * 180/M_PI,
-            arm_out.pos_ref[4][0] * 180/M_PI,
-            arm_out.pos_ref[5][0] * 180/M_PI,
-            trigger_left,
-            trigger_right
-            // g_arm_controller.joint(arm::ARM_JOINT_0)->status.pos * 180/M_PI,
-            // g_arm_controller.joint(arm::ARM_JOINT_1)->status.pos * 180/M_PI,
-            // g_arm_controller.joint(arm::ARM_JOINT_2)->status.pos * 180/M_PI,
-            // g_arm_controller.joint(arm::ARM_JOINT_3)->status.pos * 180/M_PI,
-            // g_arm_controller.joint(arm::ARM_JOINT_4)->status.pos * 180/M_PI,
-            // g_arm_controller.joint(arm::ARM_JOINT_5)->status.pos * 180/M_PI,
+            pos[0] * 1000,
+            pos[1] * 1000,
+            pos[2] * 1000,
+            rpy[0] * 180/M_PI,
+            rpy[1] * 180/M_PI,
+            rpy[2] * 180/M_PI,
+            arm_clc->T_arm_end[0][3] * 1000,
+            arm_clc->T_arm_end[1][3] * 1000,
+            arm_clc->T_arm_end[2][3] * 1000,
+            // arm_out.pos_ref[0][0] * 180/M_PI,
+            // arm_out.pos_ref[1][0] * 180/M_PI,
+            // arm_out.pos_ref[2][0] * 180/M_PI,
+            // arm_out.pos_ref[3][0] * 180/M_PI,
+            // arm_out.pos_ref[4][0] * 180/M_PI,
+            // arm_out.pos_ref[5][0] * 180/M_PI,
+            // trigger_left,
+            // trigger_right,
+            g_arm_controller.joint(arm::ARM_JOINT_0)->status.pos * 180/M_PI,
+            g_arm_controller.joint(arm::ARM_JOINT_1)->status.pos * 180/M_PI,
+            g_arm_controller.joint(arm::ARM_JOINT_2)->status.pos * 180/M_PI,
+            g_arm_controller.joint(arm::ARM_JOINT_3)->status.pos * 180/M_PI,
+            g_arm_controller.joint(arm::ARM_JOINT_4)->status.pos * 180/M_PI,
+            g_arm_controller.joint(arm::ARM_JOINT_5)->status.pos * 180/M_PI
             // left_mine_fsm.isActive(),
             // right_mine_fsm.isActive(),
-            // chassis_save_state[0],
-            // chassis_save_state[1],
-            // chassis()->open_done_L,
-            // chassis()->close_done_L,
-            // chassis()->open_done_R,
-            // chassis()->close_done_R,
             // left_mine_fsm.step(),
             // right_mine_fsm.step()
             // tmp_pos[0][0] * 180/M_PI,
@@ -556,6 +555,9 @@ void app_gimbal_init() {
     g_arm_controller.setUseFri(arm::ARM_JOINT_3, 0.6, 2.6);
     g_arm_controller.setUseSumAngle(arm::ARM_JOINT_5);
     g_arm_controller.setUseSumAngle(arm::ARM_JOINT_3);
+
+    servo_yaw.init(&htim2, TIM_CHANNEL_1, 50.0, 180.0f, 270.0f, 0.0f);
+    servo_pitch.init(&htim2, TIM_CHANNEL_3, 50.0, 95.0f, 270.0f, 0.0f);
 }
 
 bool app_gimbal_ready() {
