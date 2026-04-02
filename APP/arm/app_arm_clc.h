@@ -47,7 +47,7 @@ namespace arm {
         Matrixf<6, 1> upd_tar;
         uint32_t clc_time[5] = {};
         uint8_t best_idx_t;
-        int16_t tmp;
+        float tmp;
     };
 
     class Arm_link {
@@ -214,7 +214,10 @@ namespace arm {
             float theta3[2];
             float k_t = (px*px + py*py + pz*pz - a2*a2 - a3*a3 - d2*d2 - d4*d4) / (2.0f*a2);
             float sqrt_arg = a3*a3 + d4*d4 - k_t*k_t;
-            if (sqrt_arg < 1e-6 || !std::isfinite(sqrt_arg)) {
+            if (sqrt_arg >= -1e-6 && sqrt_arg < 0.0) {
+                sqrt_arg = 0.0;
+            }
+            if (sqrt_arg < -1e-6 || !std::isfinite(sqrt_arg)) {
                 arm_theta.raw_data = matrixf::zeros<8, 6>();
                 arm_theta.range_state = false;
                 return;
@@ -409,7 +412,7 @@ namespace arm {
 
         uint32_t clc_time[5] = {};
         uint32_t lst_clc_time[5] = {};
-        int16_t diff_tmp[8] = {};
+        float diff_tmp[8] = {};
         uint8_t best_idx_t = 0;
 
     private:

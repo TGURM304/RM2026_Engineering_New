@@ -24,14 +24,10 @@ namespace servo {
             bsp_tim_set_blank(htim_, pwm_channel_, angle_to_blank(angle));
         }
 
-        void open() {
-            set_angle(lim_max_);
-        }
-
-        void close() {
-            set_angle(lim_min_);
-        }
-
+        void open() { set_angle(lim_max_); }
+        void close() { set_angle(lim_min_); }
+        float get_max() { return lim_max_; }
+        float get_min() { return lim_min_; }
         bool get_state() { return inited_; }
 
     private:
