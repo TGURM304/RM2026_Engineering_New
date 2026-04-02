@@ -268,6 +268,24 @@ static Matrixf<6, 1> get_clc_angle(const arm::app_Arm_data_t* data_) {
     }else return g_arm_controller.get_waiting_deg();
 }
 
+/** DM 原始反馈角 -> pos_ref 快照（与 joints_->status.pos、get_clc_angle 输出同一套坐标，勿用模型侧换算） */
+static void dm_raw_snapshot_to_pos_ref(const float dm[6], Matrixf<6, 1>& out) {
+    for (int i = 0; i < 6; ++i) {
+        out[i][0] = dm[i];
+    }
+}
+
+static Matrixf<6, 1> arm_pos_ref_select(bool cc_hold, const Matrixf<6, 1>& frozen_q, bool use_delta,
+    const Matrixf<6, 1>& tmp_pos) {
+    if(cc_hold) {
+        return frozen_q;
+    }
+    if(use_delta) {
+        return tmp_pos;
+    }
+    return g_arm_controller.get_waiting_deg();
+}
+
 int16_t chassis_vx = 0, chassis_vy = 0;
 int16_t chassis_rotate = 0;
 // 0: lift	1: right
@@ -309,7 +327,16 @@ void app_gimbal_task(void *args) {
     uint8_t send_count = 0;
     bool hand_key[4] = {false, false, false, false};               // 原始按键电平（1 按下，0 抬起）
     bool hand_key_toggle[4] = {false, false, false, false};        // 点按翻转后的四路标志位
-    app_key_toggle_ctx_t hand_key_ctx = {};                        // 消抖 + 上升沿上下文
+    app_key_toggle_ctx_t hand_key_ctx = {};                        // 上升沿翻转
+    /* 自定义控制器重映射（仅在下文「裁判+自定义控制器在线」分支内更新） */
+    constexpr int kCcRemapHoldKey = 0;
+    float pos_cc_bias[3] = {}, rpy_cc_bias[3] = {};
+    float pos_cc_tar[3] = {}, rpy_cc_tar[3] = {};
+    float j0_cc_frozen = 0.0f;
+    Matrixf<6, 1> cc_frozen_joint_q = matrixf::zeros<6, 1>();
+    bool cc_remap_was_hold = false;
+    bool cc_snap_joints = false;
+    bool cc_remap_active = false;
     float pos[3], rpy[3], hand_rs[2];
     float servo_pitch_d = 180.0f;
     float servo_yaw_d = 105.0f;
@@ -319,6 +346,8 @@ void app_gimbal_task(void *args) {
     Matrixf<6, 1> tmp_pos = matrixf::zeros<6, 1>();
     Matrixf<6, 1> pos_ref_tmp = matrixf::zeros<6, 1>();
     bool trigger_left = false, trigger_right = false;
+    /* key1+key2 同时按上一帧，用于上升沿触发「重映射恢复初值」 */
+    bool cc_k12_prev = false;
 
     OS::Task::SleepMilliseconds(3000);
     gimbal_init = 1;
@@ -370,14 +399,14 @@ void app_gimbal_task(void *args) {
         if(bsp_time_get_ms() - referee->timestamp < 200) {
             if(bsp_time_get_ms() - referee->custom_controller_timestamp < 200) {
                 float pos_raw[3], rpy_raw[3], hand_rs_raw[2];
-                pos_raw[0] =  (referee->custom_controller.pos_data[2] + 0.197f)*3.7f + 0.640f;
-                pos_raw[1] = -(referee->custom_controller.pos_data[1] + 0.019f)*4.0f;
-                pos_raw[2] =  (referee->custom_controller.pos_data[0] - 0.014f)*4.0f + 0.740f;
+                pos_raw[0] =  (referee->custom_controller.pos_data[2] + 0.197f)*3.0f + 0.640f;
+                pos_raw[1] = -(referee->custom_controller.pos_data[1] + 0.019f)*3.5f;
+                pos_raw[2] =  (referee->custom_controller.pos_data[0] - 0.014f)*3.0f + 0.740f;
 
                 // rpy_raw[0] = (-referee->custom_controller.rpy_data[2] + 180.0f) * M_PI / 180.0f;
                 // rpy_raw[1] = (referee->custom_controller.rpy_data[1] + 90.0f) * M_PI / 180.0f;
                 // rpy_raw[2] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
-                rpy_raw[0] = -referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
+                rpy_raw[0] =  referee->custom_controller.rpy_data[0] * M_PI / 180.0f;
                 rpy_raw[1] = -referee->custom_controller.rpy_data[1] * M_PI / 180.0f;
                 rpy_raw[2] = -referee->custom_controller.rpy_data[2] * M_PI / 180.0f;
 
@@ -390,6 +419,34 @@ void app_gimbal_task(void *args) {
                 hand_key[3] = referee->custom_controller.key.key4;
                 app_key_toggle_4(hand_key_toggle, hand_key, &hand_key_ctx);
 
+                /* key1+key2 同时按下上升沿：重映射恢复初态（零偏置 = 仅线性标定后的手柄→位姿，无保持记忆） */
+                {
+                    const bool k12 = hand_key[0] && hand_key[1];
+                    if(k12 && !cc_k12_prev) {
+                        pos_cc_bias[0] = pos_cc_bias[1] = pos_cc_bias[2] = 0.0f;
+                        rpy_cc_bias[0] = rpy_cc_bias[1] = rpy_cc_bias[2] = 0.0f;
+                        pos_cc_tar[0] = pos_cc_tar[1] = pos_cc_tar[2] = 0.0f;
+                        rpy_cc_tar[0] = rpy_cc_tar[1] = rpy_cc_tar[2] = 0.0f;
+                        j0_cc_frozen = 0.0f;
+                        for (int i = 0; i < 6; ++i) {
+                            cc_frozen_joint_q[i][0] = 0.0f;
+                        }
+                        cc_remap_was_hold = false;
+                        cc_snap_joints = false;
+                        cc_remap_active = false;
+                        for (uint8_t i = 0; i < 3; ++i) {
+                            pos_lpf[i].reset(pos_raw[i]);
+                            rpy_lpf[i].reset(rpy_raw[i]);
+                        }
+                        hand_rs_lpf[0].reset(hand_rs_raw[0]);
+                        hand_rs_lpf[1].reset(hand_rs_raw[1]);
+                        lpf_inited = true;
+                        servo_pitch_d = 180.0f;
+                        servo_yaw_d = 105.0f;
+                    }
+                    cc_k12_prev = k12;
+                }
+
                 if (!lpf_inited) {
                     for (uint8_t i = 0; i < 3; ++i) {
                         pos_lpf[i].reset(pos_raw[i]);
@@ -399,19 +456,47 @@ void app_gimbal_task(void *args) {
                     hand_rs_lpf[1].reset(hand_rs_raw[1]);
                     lpf_inited = true;
                 }
+                float pos_filt[3], rpy_filt[3];
                 for (uint8_t i = 0; i < 3; ++i) {
-                    pos[i] = static_cast<float>(pos_lpf[i].update(pos_raw[i], 0.001));
-                    rpy[i] = static_cast<float>(rpy_lpf[i].update(rpy_raw[i], 0.001));
+                    pos_filt[i] = static_cast<float>(pos_lpf[i].update(pos_raw[i], 0.001f));
+                    rpy_filt[i] = static_cast<float>(rpy_lpf[i].update(rpy_raw[i], 0.001f));
                 }
-                hand_rs[0] = static_cast<float>(hand_rs_lpf[0].update(hand_rs_raw[0], 0.001));
-                hand_rs[1] = static_cast<float>(hand_rs_lpf[1].update(hand_rs_raw[1], 0.001));
+                hand_rs[0] = static_cast<float>(hand_rs_lpf[0].update(hand_rs_raw[0], 0.001f));
+                hand_rs[1] = static_cast<float>(hand_rs_lpf[1].update(hand_rs_raw[1], 0.001f));
 
-
-                if(hand_key_toggle[1]) {
-                    rpy_raw[1] *= -1;
+                /* 仅单独按住 key1：手柄可动、臂目标/关节锁定。key1+key2 为组合复位，不参与 hold */
+                const bool cc_hold = hand_key[kCcRemapHoldKey] && !hand_key[1];
+                if(cc_hold) {
+                    /* 刚按下(0->1)这一帧：记下当前指令空间目标并锁关节；按住期间不再进这里 */
+                    if(!cc_remap_was_hold) {
+                        for(uint8_t i = 0; i < 3; i++) {
+                            pos_cc_tar[i] = pos_filt[i] + pos_cc_bias[i];
+                            rpy_cc_tar[i] = rpy_filt[i] + rpy_cc_bias[i];
+                        }
+                        j0_cc_frozen = j0_rc_angle;
+                        cc_snap_joints = true;
+                    }
+                    /* 按住期间每一帧：末端 pos/rpy 保持 pos_cc_tar 不变；偏置随 pos_filt 变化，方便松手后仍对齐 */
+                    for(uint8_t i = 0; i < 3; i++) {
+                        pos_cc_bias[i] = pos_cc_tar[i] - pos_filt[i];
+                        rpy_cc_bias[i] = rpy_cc_tar[i] - rpy_filt[i];
+                        pos[i]           = pos_cc_tar[i];
+                        rpy[i]           = rpy_cc_tar[i];
+                    }
+                    j0_rc_angle      = j0_cc_frozen;
+                    cc_remap_was_hold = true;
+                    cc_remap_active   = true;
+                } else {
+                    /* 按键为 0：不做上述锁定，用手柄+已保存偏置正常跟手 */
+                    for(uint8_t i = 0; i < 3; i++) {
+                        pos[i] = pos_filt[i] + pos_cc_bias[i];
+                        rpy[i] = rpy_filt[i] + rpy_cc_bias[i];
+                    }
+                    cc_remap_was_hold = false;
+                    cc_remap_active   = false;
                 }
 
-                servo_yaw_d   -= hand_rs[0] / 270 * 0.05;
+                servo_yaw_d   += hand_rs[0] / 270 * 0.05;
                 servo_pitch_d -= hand_rs[1] / 270 * 0.05;
 
                 servo_yaw_d = math::limit(servo_yaw_d, servo_yaw.get_min(), servo_yaw.get_max());
@@ -421,21 +506,33 @@ void app_gimbal_task(void *args) {
                 memcpy(lst_rpy, rpy, sizeof(lst_rpy));
             }else {
                 lpf_inited = false;
+                cc_k12_prev = false;
                 hand_rs[0] = hand_rs[1] = 0.0f;
                 servo_pitch_d = 180.0f;
                 servo_yaw_d = 105.0f;
                 hand_key[0] = hand_key[1] = hand_key[2] = hand_key[3] = false;
                 hand_key_toggle[0] = hand_key_toggle[1] = hand_key_toggle[2] = hand_key_toggle[3] = false;
                 app_key_toggle_init(&hand_key_ctx);
+                pos_cc_bias[0] = pos_cc_bias[1] = pos_cc_bias[2] = 0.0f;
+                rpy_cc_bias[0] = rpy_cc_bias[1] = rpy_cc_bias[2] = 0.0f;
+                cc_remap_was_hold = false;
+                cc_snap_joints     = false;
+                cc_remap_active    = false;
                 pos[0] = pos[1] = pos[2] = lst_pos[0] = lst_pos[1] = lst_pos[2] = 0.0f;
                 rpy[0] = rpy[1] = rpy[2] = lst_rpy[0] = lst_rpy[1] = lst_rpy[2] = 0.0f;
             }
         }else {
             lpf_inited = false;
+            cc_k12_prev = false;
             hand_rs[0] = hand_rs[1] = 0.0f;
             hand_key[0] = hand_key[1] = hand_key[2] = hand_key[3] = false;
             hand_key_toggle[0] = hand_key_toggle[1] = hand_key_toggle[2] = hand_key_toggle[3] = false;
             app_key_toggle_init(&hand_key_ctx);
+            pos_cc_bias[0] = pos_cc_bias[1] = pos_cc_bias[2] = 0.0f;
+            rpy_cc_bias[0] = rpy_cc_bias[1] = rpy_cc_bias[2] = 0.0f;
+            cc_remap_was_hold = false;
+            cc_snap_joints     = false;
+            cc_remap_active    = false;
             servo_pitch_d = 180.0f;
             servo_yaw_d = 105.0f;
             pos[0] = pos[1] = pos[2] = lst_pos[0] = lst_pos[1] = lst_pos[2] = 0.0f;
@@ -448,6 +545,11 @@ void app_gimbal_task(void *args) {
         DM_pos[3] = DM_Joint3.status.pos;
         DM_pos[4] = DM_Joint4.status.pos;
         DM_pos[5] = DM_Joint5.status.pos;
+
+        if(cc_snap_joints) {
+            dm_raw_snapshot_to_pos_ref(DM_pos, cc_frozen_joint_q);
+            cc_snap_joints = false;
+        }
 
         get_DM_angle(pos, rpy, j0_rc_angle);
         tmp_pos = get_clc_angle(arm_clc);
@@ -473,11 +575,6 @@ void app_gimbal_task(void *args) {
         //     arm_out.pos_ref = g_arm_controller.get_waiting_deg();
         //     // arm_out.pos_ref = Matrixf<6, 1>(const_cast<float*>(save1_deg_q));
         // }
-        if(use_delta) {
-            arm_out.pos_ref = tmp_pos;
-        }else {
-            arm_out.pos_ref = g_arm_controller.get_waiting_deg();
-        }
 
         const bool mine_allowed = (g_arm_controller.getState() == arm::ArmState::Working);
         if (!mine_allowed || (!trigger_left && !trigger_right)) {
@@ -509,23 +606,19 @@ void app_gimbal_task(void *args) {
             arm_out.clamp_state, manual_save, save_fb, save_fb_valid,
             pos_ref_buf_r, clamp_buf_r, save_buf_r, force_work_r);
 
-        if (left_mine_fsm.isActive()) {
+        if (!cc_remap_active && left_mine_fsm.isActive()) {
             for (int i = 0; i < 6; i++) arm_out.pos_ref[i][0] = pos_ref_buf_l[i];
             arm_out.clamp_state = clamp_buf_l;
             chassis_save_state[0] = save_buf_l[0];
             chassis_save_state[1] = save_buf_l[1];
-        } else if (right_mine_fsm.isActive()) {
+        } else if (!cc_remap_active && right_mine_fsm.isActive()) {
             for (int i = 0; i < 6; i++) arm_out.pos_ref[i][0] = pos_ref_buf_r[i];
             arm_out.clamp_state = clamp_buf_r;
             chassis_save_state[0] = save_buf_r[0];
             chassis_save_state[1] = save_buf_r[1];
         }else {
             chassis_save_state[0] = chassis_save_state[1] = 0;
-            if(use_delta) {
-                arm_out.pos_ref = tmp_pos;
-            }else {
-                arm_out.pos_ref = g_arm_controller.get_waiting_deg();
-            }
+            arm_out.pos_ref = arm_pos_ref_select(cc_remap_active, cc_frozen_joint_q, use_delta, tmp_pos);
         }
 
         g_arm_controller.update(arm_out);
@@ -620,7 +713,7 @@ void app_gimbal_init() {
     g_arm_controller.setUseSumAngle(arm::ARM_JOINT_3);
 
     servo_pitch.init(&htim2, TIM_CHANNEL_1, 50.0, 180.0f, 250.0f, 100.0f);
-    servo_yaw.init(&htim2, TIM_CHANNEL_3, 50.0, 105.0f, 155.0f, 90.0f);
+    servo_yaw.init(&htim2, TIM_CHANNEL_3, 50.0, 105.0f, 155.0f, 60.0f);
 }
 
 bool app_gimbal_ready() {
